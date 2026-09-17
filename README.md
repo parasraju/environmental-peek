@@ -14,8 +14,6 @@
 npm install -g environmental-peek
 # or
 npx environmental-peek
-# legacy alias still works:
-npx envpeek
 ```
 
 ## Quick start
