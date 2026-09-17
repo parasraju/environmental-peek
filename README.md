@@ -1,24 +1,28 @@
-# envpeek
+# environmental-peek
 
-> Peek inside your `.env` without accidentally leaking it.
+> Peek inside your `.env` without accidentally leaking it. *(aka `envpeek`)*
 
 **Your secrets deserve better than `console.log(process.env)`**
 
-`envpeek` is a safe, fast, modern CLI for inspecting `.env` files. Secrets are masked by default — never leak tokens in your terminal, screenshots, recordings, or CI logs.
+`environmental-peek` (binary: `envpeek` + `environmental-peek`) is a safe, fast, modern CLI for inspecting `.env` files. Secrets are masked by default — never leak tokens in your terminal, screenshots, recordings, or CI logs.
 
 ---
 
 ## Install
 
 ```bash
-npm install -g envpeek
+npm install -g environmental-peek
 # or
+npx environmental-peek
+# legacy alias still works:
 npx envpeek
 ```
 
 ## Quick start
 
 ```bash
+npx environmental-peek
+# or
 npx envpeek
 ```
 
@@ -174,7 +178,7 @@ Not shell execution — `$(rm -rf ...)` is treated as plain text.
 ## Programmatic API
 
 ```ts
-import { parseEnv, maskValue, detectSecret, formatTable } from "envpeek";
+import { parseEnv, maskValue, detectSecret, formatTable } from "environmental-peek";
 
 const { entries } = parseEnv('PORT=3000\nAPI_KEY=secret');
 detectSecret("API_KEY"); // true

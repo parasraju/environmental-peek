@@ -2,15 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.2] - 2026-09-17
-
-### Changed
-- Bumped version for npm publish (0.1.0 and 0.1.1 already released)
-
 ## [0.1.0] - 2026-09-17
 
 ### Added
-- Initial release of `envpeek`
+- Initial release of `environmental-peek` (alias `envpeek`)
 - Safe `.env` parsing with custom parser (quotes, comments, whitespace, multiline)
 - Heuristic secret detection (case-insensitive, 20+ patterns)
 - Masking system with prefix preservation and full mask for short/multiline secrets
@@ -25,3 +20,4 @@ All notable changes to this project will be documented in this file.
 - Programmatic API: `parseEnv`, `maskValue`, `detectSecret`, `formatTable`, `formatJson`
 - Cross-platform path handling
 - 82 tests, strict TypeScript, tsup build
+- Renamed from `envpeek` to `environmental-peek` for npm availability (GitHub: `parasraju/environmental-peek`)

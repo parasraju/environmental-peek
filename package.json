@@ -1,9 +1,10 @@
 {
-  "name": "envpeek",
-  "version": "0.1.2",
-  "description": "Safely inspect your .env files without leaking secrets",
+  "name": "environmental-peek",
+  "version": "0.1.0",
+  "description": "Safely inspect your .env files without leaking secrets — environmental peek",
   "type": "module",
   "bin": {
+    "environmental-peek": "./dist/cli.js",
     "envpeek": "./dist/cli.js"
   },
   "exports": {

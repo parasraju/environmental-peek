@@ -5,13 +5,14 @@ import { readFromStdin } from "./scanner.js";
 import { formatTable, formatJson } from "./formatter.js";
 import type { CliOptions, EnvEntry } from "./types.js";
 
-const VERSION = "0.1.2";
+const VERSION = "0.1.0";
 
 function printHelp(): void {
   const help = `
-envpeek — Peek inside your .env without accidentally leaking it.
+environmental-peek (envpeek) — Peek inside your .env without accidentally leaking it.
 
 Usage:
+  environmental-peek [file] [options]
   envpeek [file] [options]
 
 Arguments:
