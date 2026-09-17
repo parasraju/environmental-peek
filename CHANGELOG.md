@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1] - 2026-09-17
+
+### Changed
+- Docs: remove legacy alias note from README install
+
 ## [0.1.0] - 2026-09-17
 
 ### Added

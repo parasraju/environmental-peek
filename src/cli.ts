@@ -5,7 +5,7 @@ import { readFromStdin } from "./scanner.js";
 import { formatTable, formatJson } from "./formatter.js";
 import type { CliOptions, EnvEntry } from "./types.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 
 function printHelp(): void {
   const help = `
