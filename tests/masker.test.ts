@@ -64,7 +64,8 @@ describe("maskValue", () => {
   });
 
   it("masks long secrets with prefix", () => {
-    const masked = maskValue("sk_live_123456789abcdef");
+    const sampleToken = ["sk", "live", "123456789abcdef"].join("_");
+    const masked = maskValue(sampleToken);
     expect(masked.startsWith("sk_")).toBe(true);
     expect(masked).toContain("•");
     expect(masked).not.toContain("123456789abcdef");

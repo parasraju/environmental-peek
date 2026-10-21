@@ -154,7 +154,7 @@ Heuristic, case-insensitive name matching:
 ## Masking
 
 ```ts
-maskValue("sk_live_123456789abcdef") // → "sk_••••••••••••"
+maskValue("token_live_123456789abcdef") // → "to••••••••••••"
 maskValue("abc")                     // → "••••"
 maskValue("-----BEGIN...")           // multiline → "********"
 ```

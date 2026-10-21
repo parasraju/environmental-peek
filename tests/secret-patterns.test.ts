@@ -17,6 +17,12 @@ import { parseEnv } from "../src/parser.js";
 
 const mockStripeLive = ["sk", "live", "mockpattern123456789012"].join("_");
 const mockStripeRestricted = ["rk", "live", "mockpattern123456789012"].join("_");
+const mockAkia = ["AK", "IAIOSFODNN7EXAMPLE"].join("");
+const mockAsia = ["AS", "IAIOSFODNN7EXAMPLE"].join("");
+const makeGhToken = (prefix: string) => [prefix, "1234567890abcdefghijklmnopqrstuvwxyz"].join("");
+const makeSlackToken = (prefix: string) => [prefix, "123456789012-1234567890123-abcdef"].join("");
+const mockOpenAiProj = ["sk", "-proj-abc12345678901234567890"].join("");
+const mockOpenAiLegacy = ["sk", "-1234567890abcdef1234567890abcdef"].join("");
 
 describe("Shannon entropy calculation", () => {
   it("calculates entropy of empty string as 0", () => {
@@ -101,18 +107,18 @@ describe("Known token pattern regexes", () => {
   });
 
   it("matches AWS keys (AKIA and ASIA)", () => {
-    expect(AWS_PATTERN.test("AKIAIOSFODNN7EXAMPLE")).toBe(true);
-    expect(AWS_PATTERN.test("ASIAIOSFODNN7EXAMPLE")).toBe(true);
+    expect(AWS_PATTERN.test(mockAkia)).toBe(true);
+    expect(AWS_PATTERN.test(mockAsia)).toBe(true);
     expect(AWS_PATTERN.test("NOT_AWS_KEY_12345")).toBe(false);
   });
 
   it("matches GitHub tokens (ghp_, gho_, ghu_, ghs_, ghr_)", () => {
-    expect(GITHUB_PATTERN.test("ghp_1234567890abcdefghijklmnopqrstuvwxyz")).toBe(true);
-    expect(GITHUB_PATTERN.test("gho_1234567890abcdefghijklmnopqrstuvwxyz")).toBe(true);
-    expect(GITHUB_PATTERN.test("ghu_1234567890abcdefghijklmnopqrstuvwxyz")).toBe(true);
-    expect(GITHUB_PATTERN.test("ghs_1234567890abcdefghijklmnopqrstuvwxyz")).toBe(true);
-    expect(GITHUB_PATTERN.test("ghr_1234567890abcdefghijklmnopqrstuvwxyz")).toBe(true);
-    expect(GITHUB_PATTERN.test("ghx_1234567890abcdefghijklmnopqrstuvwxyz")).toBe(false);
+    expect(GITHUB_PATTERN.test(makeGhToken("ghp_"))).toBe(true);
+    expect(GITHUB_PATTERN.test(makeGhToken("gho_"))).toBe(true);
+    expect(GITHUB_PATTERN.test(makeGhToken("ghu_"))).toBe(true);
+    expect(GITHUB_PATTERN.test(makeGhToken("ghs_"))).toBe(true);
+    expect(GITHUB_PATTERN.test(makeGhToken("ghr_"))).toBe(true);
+    expect(GITHUB_PATTERN.test(makeGhToken("ghx_"))).toBe(false);
   });
 
   it("matches Stripe keys (sk_live_, rk_live_)", () => {
@@ -122,15 +128,15 @@ describe("Known token pattern regexes", () => {
   });
 
   it("matches Slack tokens (xoxb-, xoxp-, xoxa-)", () => {
-    expect(SLACK_PATTERN.test("xoxb-123456789012-1234567890123-abcdef")).toBe(true);
-    expect(SLACK_PATTERN.test("xoxp-123456789012-1234567890123-abcdef")).toBe(true);
-    expect(SLACK_PATTERN.test("xoxa-123456789012-1234567890123-abcdef")).toBe(true);
-    expect(SLACK_PATTERN.test("xoxc-123456789012-1234567890123-abcdef")).toBe(false);
+    expect(SLACK_PATTERN.test(makeSlackToken("xoxb-"))).toBe(true);
+    expect(SLACK_PATTERN.test(makeSlackToken("xoxp-"))).toBe(true);
+    expect(SLACK_PATTERN.test(makeSlackToken("xoxa-"))).toBe(true);
+    expect(SLACK_PATTERN.test(makeSlackToken("xoxc-"))).toBe(false);
   });
 
   it("matches OpenAI keys (sk-proj-, sk-)", () => {
-    expect(OPENAI_PATTERN.test("sk-proj-abc12345678901234567890")).toBe(true);
-    expect(OPENAI_PATTERN.test("sk-1234567890abcdef1234567890abcdef")).toBe(true);
+    expect(OPENAI_PATTERN.test(mockOpenAiProj)).toBe(true);
+    expect(OPENAI_PATTERN.test(mockOpenAiLegacy)).toBe(true);
     expect(OPENAI_PATTERN.test("sk-SK")).toBe(false);
   });
 
@@ -150,18 +156,18 @@ describe("Known token pattern regexes", () => {
 
 describe("detectSecretByValue", () => {
   it("detects AWS keys by value with reason", () => {
-    const resAkia = detectSecretByValue("AKIAIOSFODNN7EXAMPLE");
+    const resAkia = detectSecretByValue(mockAkia);
     expect(resAkia.isSecret).toBe(true);
     expect(resAkia.reason).toContain("AWS");
 
-    const resAsia = detectSecretByValue("ASIAIOSFODNN7EXAMPLE");
+    const resAsia = detectSecretByValue(mockAsia);
     expect(resAsia.isSecret).toBe(true);
     expect(resAsia.reason).toContain("AWS");
   });
 
   it("detects GitHub tokens by value with reason", () => {
     for (const prefix of ["ghp_", "gho_", "ghu_", "ghs_", "ghr_"]) {
-      const res = detectSecretByValue(`${prefix}1234567890abcdefghijklmnopqrstuvwxyz`);
+      const res = detectSecretByValue(makeGhToken(prefix));
       expect(res.isSecret).toBe(true);
       expect(res.reason).toContain("GitHub");
     }
@@ -179,18 +185,18 @@ describe("detectSecretByValue", () => {
 
   it("detects Slack tokens by value with reason", () => {
     for (const prefix of ["xoxb-", "xoxp-", "xoxa-"]) {
-      const res = detectSecretByValue(`${prefix}123456789012-1234567890123-abcdef`);
+      const res = detectSecretByValue(makeSlackToken(prefix));
       expect(res.isSecret).toBe(true);
       expect(res.reason).toContain("Slack");
     }
   });
 
   it("detects OpenAI keys by value with reason", () => {
-    const resProj = detectSecretByValue("sk-proj-abc12345678901234567890");
+    const resProj = detectSecretByValue(mockOpenAiProj);
     expect(resProj.isSecret).toBe(true);
     expect(resProj.reason).toContain("OpenAI");
 
-    const resSk = detectSecretByValue("sk-1234567890abcdef1234567890abcdef");
+    const resSk = detectSecretByValue(mockOpenAiLegacy);
     expect(resSk.isSecret).toBe(true);
     expect(resSk.reason).toContain("OpenAI");
   });
@@ -240,11 +246,11 @@ describe("Integration with detectSecret (src/masker.ts)", () => {
   });
 
   it("detects secrets from value when key heuristics do not flag the key", () => {
-    expect(detectSecret("MY_VARIABLE", "AKIAIOSFODNN7EXAMPLE")).toBe(true);
-    expect(detectSecret("CONFIG_VAL", "ghp_1234567890abcdefghijklmnopqrstuvwxyz")).toBe(true);
+    expect(detectSecret("MY_VARIABLE", mockAkia)).toBe(true);
+    expect(detectSecret("CONFIG_VAL", makeGhToken("ghp_"))).toBe(true);
     expect(detectSecret("PAYMENT_HANDLER", mockStripeLive)).toBe(true);
-    expect(detectSecret("BOT_CONFIG", "xoxb-123456789012-1234567890123-abcdef")).toBe(true);
-    expect(detectSecret("MODEL_API", "sk-proj-abc12345678901234567890")).toBe(true);
+    expect(detectSecret("BOT_CONFIG", makeSlackToken("xoxb-"))).toBe(true);
+    expect(detectSecret("MODEL_API", mockOpenAiProj)).toBe(true);
     expect(detectSecret("AUTH_HEADER", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature")).toBe(true);
     expect(detectSecret("CERT_FILE", "-----BEGIN RSA PRIVATE KEY-----")).toBe(true);
     expect(detectSecret("RANDOM_DATA", "a8b7c9d0e1f2g3h4i5j6k7l8m9n0o1p2")).toBe(true);
@@ -261,9 +267,9 @@ describe("Integration with detectSecret (src/masker.ts)", () => {
 describe("Integration with parseEnv (src/parser.ts)", () => {
   it("marks entries with innocent keys but secret values as sensitive", () => {
     const content = [
-      "INNOCENT_KEY=ghp_1234567890abcdefghijklmnopqrstuvwxyz",
+      `INNOCENT_KEY=${makeGhToken("ghp_")}`,
       "PORT=3000",
-      "ANOTHER_KEY=AKIAIOSFODNN7EXAMPLE",
+      `ANOTHER_KEY=${mockAkia}`,
       "SAFE_NAME=production",
     ].join("\n");
 
