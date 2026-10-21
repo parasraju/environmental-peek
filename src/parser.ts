@@ -79,7 +79,7 @@ export function parseEnv(content: string): ParseResult {
     // Now parse value
     const parsedValue = parseValue(valuePart);
 
-    const sensitive = detectSecret(keyPart);
+    const sensitive = detectSecret(keyPart, parsedValue);
     // Also treat multiline as sensitive regardless of name
     const isMultiline = parsedValue.includes("\n");
     const finalSensitive = sensitive || isMultiline;

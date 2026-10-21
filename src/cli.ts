@@ -3,7 +3,11 @@ import { resolve, isAbsolute } from "node:path";
 import { parseEnv } from "./parser.js";
 import { readFromStdin } from "./scanner.js";
 import { formatTable, formatJson } from "./formatter.js";
-import type { CliOptions, EnvEntry } from "./types.js";
+import { diffEnvs, formatDiff, formatDiffJson } from "./diff.js";
+import { generateExample } from "./generator.js";
+import { validateEnv, formatValidation } from "./validator.js";
+import { filterEntries } from "./filter.js";
+import type { CliOptions } from "./types.js";
 
 const VERSION = "0.1.1";
 
@@ -12,41 +16,53 @@ function printHelp(): void {
 environmental-peek (envpeek) — Peek inside your .env without accidentally leaking it.
 
 Usage:
-  environmental-peek [file] [options]
   envpeek [file] [options]
+  envpeek diff <base> [target] [options]
+  envpeek example [file] [options]
+  envpeek check [file] [options]
+
+Commands:
+  diff <base> [target]    Compare two env files (default target: .env)
+  example [file]          Generate a clean .env.example with placeholders (alias: gen-example)
+  check [file]            Validate types, URLs, ports, and placeholder leaks (alias: lint)
 
 Arguments:
   file                    Path to env file (default: .env)
 
 Options:
   -f, --file <path>       Specify env file path
+  --filter <query>        Filter variables matching query (key or value)
+  -k, --key <name>        Lookup a specific key exactly
   --show                  Reveal secret values (use with caution)
   --raw                   Alias for --show (reveal raw values)
-  --json                  Output as JSON (secrets still masked)
+  --json                  Output as JSON (secrets still masked by default)
   --no-color              Disable ANSI colors
   --quiet                 Only show warnings/errors
   --sort                  Sort variables alphabetically
+  --strict                Strict mode for checks (fails on placeholders)
+  --style <name>          Placeholder style for example: bracket, dummy, empty
   -h, --help              Show help
   -v, --version           Show version
 
 Examples:
   npx envpeek
   envpeek .env.local
-  envpeek --file .env.production
-  envpeek --json
-  envpeek --show
+  envpeek --filter API
+  envpeek -k DATABASE_URL
+  envpeek diff .env.example .env
+  envpeek example .env > .env.example
+  envpeek check .env --strict
   cat .env | envpeek -
 
 Security:
-  Secrets are masked by default. Use --show to reveal values.
-  Never pipe --show output to logs or share it.
-
+  Secrets and sensitive tokens are masked by default.
+  Use --show only when strictly necessary.
 `.trim();
   console.log(help);
 }
 
-function parseArgs(argv: string[]): CliOptions & { positionalFile?: string } {
-  const opts: CliOptions & { positionalFile?: string } = {
+function parseArgs(argv: string[]): CliOptions & { positionalFile?: string; positionalFile2?: string } {
+  const opts: CliOptions & { positionalFile?: string; positionalFile2?: string } = {
     show: false,
     raw: false,
     json: false,
@@ -59,6 +75,22 @@ function parseArgs(argv: string[]): CliOptions & { positionalFile?: string } {
 
   const args = argv.slice(2);
   let i = 0;
+
+  // Check first argument for subcommand
+  if (args.length > 0) {
+    const first = args[0];
+    if (first === "diff") {
+      opts.command = "diff";
+      i = 1;
+    } else if (first === "example" || first === "gen-example") {
+      opts.command = "example";
+      i = 1;
+    } else if (first === "check" || first === "lint") {
+      opts.command = "check";
+      i = 1;
+    }
+  }
+
   while (i < args.length) {
     const arg = args[i];
     if (arg === "--help" || arg === "-h") {
@@ -78,6 +110,40 @@ function parseArgs(argv: string[]): CliOptions & { positionalFile?: string } {
       opts.quiet = true;
     } else if (arg === "--sort") {
       opts.sort = true;
+    } else if (arg === "--strict") {
+      opts.strict = true;
+    } else if (arg === "--check") {
+      opts.command = "check";
+    } else if (arg === "--filter") {
+      const next = args[i + 1];
+      if (!next || next.startsWith("-")) {
+        console.error(`✗ Missing value for ${arg}`);
+        process.exit(2);
+      }
+      opts.filter = next;
+      i++;
+    } else if (arg.startsWith("--filter=")) {
+      opts.filter = arg.split("=", 2)[1];
+    } else if (arg === "-k" || arg === "--key") {
+      const next = args[i + 1];
+      if (!next || next.startsWith("-")) {
+        console.error(`✗ Missing value for ${arg}`);
+        process.exit(2);
+      }
+      opts.key = next;
+      i++;
+    } else if (arg.startsWith("--key=")) {
+      opts.key = arg.split("=", 2)[1];
+    } else if (arg === "--style") {
+      const next = args[i + 1];
+      if (!next || next.startsWith("-")) {
+        console.error(`✗ Missing value for ${arg}`);
+        process.exit(2);
+      }
+      opts.placeholderStyle = next as "bracket" | "dummy" | "empty";
+      i++;
+    } else if (arg.startsWith("--style=")) {
+      opts.placeholderStyle = arg.split("=", 2)[1] as "bracket" | "dummy" | "empty";
     } else if (arg === "--file" || arg === "-f") {
       const next = args[i + 1];
       if (!next || next.startsWith("-")) {
@@ -91,14 +157,16 @@ function parseArgs(argv: string[]): CliOptions & { positionalFile?: string } {
     } else if (arg.startsWith("-f=")) {
       opts.file = arg.split("=", 2)[1];
     } else if (arg === "--") {
-      // everything after is positional
       if (i + 1 < args.length) {
-        opts.positionalFile = args[i + 1];
+        if (!opts.positionalFile) opts.positionalFile = args[i + 1];
+        else if (!opts.positionalFile2) opts.positionalFile2 = args[i + 1];
       }
       break;
     } else if (arg === "-") {
       if (!opts.positionalFile) {
         opts.positionalFile = arg;
+      } else if (!opts.positionalFile2) {
+        opts.positionalFile2 = arg;
       } else {
         console.error(`✗ Too many arguments: ${arg}`);
         process.exit(2);
@@ -108,9 +176,10 @@ function parseArgs(argv: string[]): CliOptions & { positionalFile?: string } {
       console.error(`Try: envpeek --help`);
       process.exit(2);
     } else {
-      // positional file
       if (!opts.positionalFile) {
         opts.positionalFile = arg;
+      } else if (!opts.positionalFile2) {
+        opts.positionalFile2 = arg;
       } else {
         console.error(`✗ Too many arguments: ${arg}`);
         process.exit(2);
@@ -119,7 +188,6 @@ function parseArgs(argv: string[]): CliOptions & { positionalFile?: string } {
     i++;
   }
 
-  // file alias: --file takes precedence, else positional
   return opts;
 }
 
@@ -149,8 +217,42 @@ function color(text: string, code: string, useColor: boolean): string {
   return (codes[code] || "") + text + codes.reset;
 }
 
+function readEnvContent(filePath: string, useColor: boolean): string {
+  if (filePath === "-") {
+    const stdinContent = readFromStdin();
+    if (!stdinContent) {
+      console.error(color("✗ No input received from stdin", "red", useColor));
+      process.exit(1);
+    }
+    return stdinContent;
+  }
+
+  const resolved = isAbsolute(filePath) ? filePath : resolve(process.cwd(), filePath);
+  if (!existsSync(resolved)) {
+    console.error(color(`✗ Could not find ${filePath}`, "red", useColor));
+    console.error("");
+    console.error(color("Try:", "dim", useColor));
+    console.error(`  envpeek .env.local`);
+    console.error(`  envpeek --help`);
+    process.exit(3);
+  }
+
+  try {
+    return readFileSync(resolved, "utf-8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "EACCES") {
+      console.error(color(`✗ Cannot read ${filePath}`, "red", useColor));
+      console.error(color("Check the file permissions and try again.", "dim", useColor));
+    } else {
+      console.error(color(`✗ Failed to read ${filePath}`, "red", useColor));
+    }
+    process.exit(1);
+  }
+}
+
 async function main(): Promise<void> {
   const opts = parseArgs(process.argv);
+  const useColor = shouldUseColor(opts.noColor);
 
   if (opts.help) {
     printHelp();
@@ -162,72 +264,84 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  // Handle diff subcommand
+  if (opts.command === "diff") {
+    const baseFile = opts.positionalFile || ".env.example";
+    const targetFile = opts.positionalFile2 || opts.file || ".env";
+
+    const baseContent = readEnvContent(baseFile, useColor);
+    const targetContent = readEnvContent(targetFile, useColor);
+
+    const baseParsed = parseEnv(baseContent);
+    const targetParsed = parseEnv(targetContent);
+
+    const diff = diffEnvs(baseParsed.entries, targetParsed.entries);
+
+    if (opts.json) {
+      console.log(formatDiffJson(diff, baseFile, targetFile, { show: opts.show, raw: opts.raw }));
+    } else {
+      console.log(formatDiff(diff, baseFile, targetFile, {
+        noColor: opts.noColor,
+        show: opts.show,
+        raw: opts.raw,
+        quiet: opts.quiet,
+      }));
+    }
+    process.exit(diff.hasDifferences ? 1 : 0);
+  }
+
+  // Handle example subcommand
+  if (opts.command === "example") {
+    const targetInput = getTargetFile(opts);
+    const content = readEnvContent(targetInput, useColor);
+    const example = generateExample(content, {
+      placeholderStyle: opts.placeholderStyle || "bracket",
+    });
+    console.log(example);
+    process.exit(0);
+  }
+
+  // Read target file for peek or check
   const targetInput = getTargetFile(opts);
   const isStdin = targetInput === "-";
+  const displayFile = isStdin ? "<stdin>" : targetInput;
+  const content = readEnvContent(targetInput, useColor);
+  const result = parseEnv(content);
+  let entries = result.entries;
 
-  let content: string;
-  let displayFile: string;
-  let entries: EnvEntry[];
-
-  if (isStdin) {
-    displayFile = "<stdin>";
-    content = readFromStdin();
-    if (!content) {
-      console.error(color("✗ No input received from stdin", "red", shouldUseColor(opts.noColor)));
-      process.exit(1);
+  // Handle check subcommand or --check flag
+  if (opts.command === "check") {
+    const validation = validateEnv(entries, { strict: opts.strict });
+    if (opts.json) {
+      console.log(JSON.stringify({ file: displayFile, ...validation }, null, 2));
+    } else {
+      console.log(formatValidation(validation, displayFile, { noColor: opts.noColor }));
     }
-    const result = parseEnv(content);
-    entries = result.entries;
-  } else {
-    const resolved = isAbsolute(targetInput) ? targetInput : resolve(process.cwd(), targetInput);
-    displayFile = targetInput;
+    process.exit(validation.valid ? 0 : 1);
+  }
 
-    if (!existsSync(resolved)) {
-      const useColor = shouldUseColor(opts.noColor);
-      console.error(color(`✗ Could not find ${displayFile}`, "red", useColor));
-      console.error("");
-      console.error(color("Try:", "dim", useColor));
-      console.error(`  envpeek .env.local`);
-      console.error(`  envpeek --help`);
-      process.exit(3);
-    }
-
-    try {
-      content = readFileSync(resolved, "utf-8");
-    } catch (err) {
-      const useColor = shouldUseColor(opts.noColor);
-      // Never include file content in error
-      if ((err as NodeJS.ErrnoException).code === "EACCES") {
-        console.error(color(`✗ Cannot read ${displayFile}`, "red", useColor));
-        console.error(color("Check the file permissions and try again.", "dim", useColor));
-      } else {
-        console.error(color(`✗ Failed to read ${displayFile}`, "red", useColor));
-      }
-      if (process.env.DEBUG) {
-        // Still don't log content, just error code
-        console.error(color(`  [${(err as NodeJS.ErrnoException).code || "UNKNOWN"}]`, "dim", useColor));
-      }
-      process.exit(1);
-    }
-
-    const result = parseEnv(content);
-    entries = result.entries;
-    // Warnings: print to stderr but don't include values
-    if (result.warnings.length > 0 && !opts.quiet && !opts.json) {
-      const useColor = shouldUseColor(opts.noColor);
-      for (const w of result.warnings) {
-        console.error(color(`⚠ ${w}`, "yellow", useColor));
-      }
+  // Standard inspect: warnings
+  if (result.warnings.length > 0 && !opts.quiet && !opts.json) {
+    for (const w of result.warnings) {
+      console.error(color(`⚠ ${w}`, "yellow", useColor));
     }
   }
 
+  // Filtering
+  if (opts.filter || opts.key) {
+    entries = filterEntries(entries, {
+      filter: opts.filter,
+      key: opts.key,
+    });
+  }
+
+  // Sorting
   if (opts.sort) {
     entries = [...entries].sort((a, b) => a.key.localeCompare(b.key));
   }
 
   // Warning for --show
   if ((opts.show || opts.raw) && !opts.quiet && !opts.json) {
-    const useColor = shouldUseColor(opts.noColor);
     console.error(color("⚠ WARNING: You are displaying environment values.", "yellow", useColor));
     console.error(color("  Make sure your terminal output is not being logged or shared.", "dim", useColor));
     console.error("");
@@ -254,7 +368,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  // Never leak env content
   console.error("✗ Unexpected error");
   if (process.env.DEBUG) {
     console.error(String((err as Error).message).slice(0, 200));

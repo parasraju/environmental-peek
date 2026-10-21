@@ -142,4 +142,53 @@ describe("CLI", () => {
     const zIdx = r.stdout.indexOf("Z_KEY");
     expect(aIdx).toBeLessThan(zIdx);
   });
+
+  it("filters variables with --filter", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, "DATABASE_URL=postgres://localhost\nPORT=3000\nAPI_KEY=xyz");
+    const r = runCli("--filter DATA .env", tmpDir);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("DATABASE_URL");
+    expect(r.stdout).not.toContain("PORT");
+  });
+
+  it("filters single variable with --key", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, "PORT=3000\nAPI_KEY=xyz");
+    const r = runCli("-k PORT .env", tmpDir);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("PORT");
+    expect(r.stdout).not.toContain("API_KEY");
+  });
+
+  it("supports diff subcommand", () => {
+    const base = join(tmpDir, ".env.example");
+    const target = join(tmpDir, ".env");
+    writeFileSync(base, "PORT=3000\nSECRET=your_secret");
+    writeFileSync(target, "PORT=3000");
+    const r = runCli(`diff ${base} ${target}`, tmpDir);
+    expect(r.status).toBe(1); // has differences
+    expect(r.stdout).toContain("envpeek diff");
+    expect(r.stdout.toLowerCase()).toContain("missing in");
+    expect(r.stdout).toContain("SECRET");
+  });
+
+  it("supports example subcommand", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, "PORT=3000\nAPI_KEY=supersecret");
+    const r = runCli(`example ${file}`, tmpDir);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("PORT=3000");
+    expect(r.stdout).toContain("API_KEY=<your-api_key>");
+    expect(r.stdout).not.toContain("supersecret");
+  });
+
+  it("supports check subcommand", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, "PORT=notaport\nDATABASE_URL=postgres://localhost/db");
+    const r = runCli(`check ${file}`, tmpDir);
+    expect(r.status).toBe(1); // invalid port
+    expect(r.stdout).toContain("envpeek check");
+    expect(r.stdout).toContain("valid-port");
+  });
 });

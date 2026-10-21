@@ -1,3 +1,6 @@
+import { detectSecretByValue } from "./secret-patterns.js";
+export { detectSecretByValue };
+
 const SENSITIVE_PATTERNS = [
   "api_key",
   "api_secret",
@@ -41,7 +44,7 @@ function normalizeKey(key: string): string {
   return key.toLowerCase();
 }
 
-export function detectSecret(key: string): boolean {
+export function detectSecret(key: string, value?: string): boolean {
   const lower = normalizeKey(key);
 
   // Exact pattern checks
@@ -72,6 +75,12 @@ export function detectSecret(key: string): boolean {
   // Broader checks
   for (const sub of SENSITIVE_SUBSTRINGS) {
     if (lower.includes(sub)) return true;
+  }
+
+  // Check value if provided
+  if (value !== undefined) {
+    const valueDetection = detectSecretByValue(value);
+    if (valueDetection.isSecret) return true;
   }
 
   return false;

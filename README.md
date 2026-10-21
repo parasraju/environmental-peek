@@ -60,14 +60,47 @@ cat .env | envpeek -    # stdin
 | Flag | Description |
 |------|-------------|
 | `-f, --file <path>` | Specify env file |
+| `--filter <query>` | Filter variables by substring match |
+| `-k, --key <name>` | Lookup a specific key exactly |
 | `--show` | Reveal secret values (with warning) |
 | `--raw` | Alias for --show |
 | `--json` | JSON output (secrets still masked) |
 | `--no-color` | Disable ANSI colors (also respects `NO_COLOR`) |
 | `--quiet` | Only warnings/errors |
 | `--sort` | Sort alphabetically |
+| `--strict` | Strict validation mode for `check` |
+| `--style <name>` | Placeholder style for `example`: bracket, dummy, empty |
 | `-h, --help` | Help |
 | `-v, --version` | Version |
+
+## Commands
+
+### 1. Diff environments (`envpeek diff`)
+
+Compare two environment files to catch missing keys, extra keys, or configuration drift without leaking secrets:
+
+```bash
+envpeek diff .env.example .env
+envpeek diff .env.local .env.production
+```
+
+### 2. Generate `.env.example` template (`envpeek example`)
+
+Generate a clean `.env.example` directly from your `.env` with structure, comments, and safe placeholders:
+
+```bash
+envpeek example .env > .env.example
+envpeek example --style dummy .env
+```
+
+### 3. Validate and lint (`envpeek check`)
+
+Audit your `.env` for invalid ports, malformed URLs/URIs, unconfigured placeholders (`CHANGEME`, `TODO`, `<your-key>`), and empty secrets:
+
+```bash
+envpeek check .env
+envpeek check .env --strict
+```
 
 ### Reveal values
 
