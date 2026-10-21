@@ -40,7 +40,7 @@ describe("CLI", () => {
   it("shows version", () => {
     const r = runCli("--version");
     expect(r.status).toBe(0);
-    expect(r.stdout.trim()).toMatch(/0\.1\./);
+    expect(r.stdout.trim()).toMatch(/0\.[12]\./);
   });
 
   it("errors on missing file", () => {

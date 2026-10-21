@@ -1,6 +1,6 @@
 {
   "name": "environmental-peek",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Safely inspect your .env files without leaking secrets — environmental peek",
   "type": "module",
   "bin": {

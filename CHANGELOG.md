@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-10-22
+
+### Added
+- Environment drift diffing engine (`envpeek diff <base> [target]`)
+- Template generator (`envpeek example [file]`) to produce clean `.env.example` files
+- Environment validator and linter (`envpeek check [file]` and `--strict`)
+- Key search and filtering (`--filter <query>`, `-k, --key <name>`)
+- Value-level secret detection (AWS, GitHub, Stripe, Slack, OpenAI, JWT, Private Keys) and Shannon entropy calculation
+
 ## [0.1.1] - 2026-09-17
 
 ### Changed

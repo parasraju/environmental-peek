@@ -9,7 +9,7 @@ import { validateEnv, formatValidation } from "./validator.js";
 import { filterEntries } from "./filter.js";
 import type { CliOptions } from "./types.js";
 
-const VERSION = "0.1.1";
+const VERSION = "0.2.0";
 
 function printHelp(): void {
   const help = `
