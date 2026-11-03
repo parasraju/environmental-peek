@@ -1,6 +1,6 @@
 {
   "name": "environmental-peek",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Safely inspect your .env files without leaking secrets — environmental peek",
   "type": "module",
   "bin": {
@@ -29,12 +29,22 @@
     "format:check": "prettier --check .",
     "prepublishOnly": "npm run typecheck && npm run lint && npm run test:run && npm run build"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/parasraju/environmental-peek.git"
+  },
+  "homepage": "https://github.com/parasraju/environmental-peek#readme",
+  "bugs": {
+    "url": "https://github.com/parasraju/environmental-peek/issues"
+  },
   "keywords": [
     "env",
     "dotenv",
     "cli",
     "security",
-    "environment"
+    "environment",
+    "envpeek",
+    "secrets"
   ],
   "author": "",
   "license": "MIT",

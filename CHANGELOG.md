@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-11-03
+
+### Changed
+- Docs: add trust-first README with real masked sample output, verified commands, and local-only security guarantee
+- Packaging: add repository, homepage, bugs, and keywords metadata to package.json
+
 ## [0.2.0] - 2026-10-22
 
 ### Added

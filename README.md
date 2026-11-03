@@ -1,260 +1,93 @@
 # environmental-peek
 
-> Peek inside your `.env` without accidentally leaking it. *(aka `envpeek`)*
+Safely inspect your `.env` files without leaking secrets — environmental peek
 
-**Your secrets deserve better than `console.log(process.env)`**
+```
+$ envpeek
 
-`environmental-peek` (binary: `envpeek` + `environmental-peek`) is a safe, fast, modern CLI for inspecting `.env` files. Secrets are masked by default — never leak tokens in your terminal, screenshots, recordings, or CI logs.
+Environment: .env
+────────────────────────────────────────
+
+✓ 🔒 DATABASE_URL        pos••••••••••••••••
+✓ 🔒 API_KEY             sk_••••••••••••••••
+○ 🔒 STRIPE_SECRET_KEY   <empty>
+✓   PORT                3000
+✓   NODE_ENV            development
+
+────────────────────────────────────────
+5 variables • 3 hidden • 2 visible • 1 empty
+```
+
+Missing variables can also be checked against `.env.example`:
+
+```
+$ envpeek diff
+
+Missing in .env (1):
+  - 🔒 STRIPE_SECRET_KEY: sk_••••••••••••••••
+```
 
 ---
 
 ## Install
 
 ```bash
+# Global install (provides `envpeek` and `environmental-peek`)
 npm install -g environmental-peek
-# or
-npx environmental-peek
-```
 
-## Quick start
-
-```bash
-npx environmental-peek
-# or
+# Or run directly with npx
 npx envpeek
 ```
-
-Finds `.env` in the current directory and displays:
-
-```
-envpeek
-
-Environment: .env
-────────────────────────────────────────
-
-✓ DATABASE_URL       ********••••••••
-✓ API_KEY             sk-••••••••••••
-✓ PORT                3000
-✓ NODE_ENV            development
-✓ DEBUG               true
-✓ EMPTY_VALUE         <empty>
-
-────────────────────────────────────────
-6 variables • 2 secrets • 1 empty
-```
-
-Safe by default. No secrets printed.
 
 ## Usage
 
 ```bash
-envpeek                 # inspect .env
-envpeek .env.local       # custom file
-envpeek --file .env.production
-envpeek -f ./config/.env
-cat .env | envpeek -    # stdin
+envpeek                     # Inspect .env in current directory
+envpeek .env.local          # Inspect a specific file
+envpeek -f ./config/.env    # Specify file path with -f / --file
+cat .env | envpeek -        # Read from stdin
+
+# Subcommands
+envpeek diff .env.example .env   # Compare two env files for missing or extra keys
+envpeek check .env               # Validate types, URLs, ports, and placeholders
+envpeek example .env             # Generate clean .env.example with placeholders
 ```
 
-## Options
+### Options
 
 | Flag | Description |
 |------|-------------|
-| `-f, --file <path>` | Specify env file |
-| `--filter <query>` | Filter variables by substring match |
+| `-f, --file <path>` | Specify env file path (default: `.env`) |
+| `--filter <query>` | Filter variables by substring match (key or value) |
 | `-k, --key <name>` | Lookup a specific key exactly |
-| `--show` | Reveal secret values (with warning) |
-| `--raw` | Alias for --show |
-| `--json` | JSON output (secrets still masked) |
+| `--show` / `--raw` | Reveal secret values in terminal output (with security warning) |
+| `--json` | Output as JSON (secrets remain masked by default) |
 | `--no-color` | Disable ANSI colors (also respects `NO_COLOR`) |
-| `--quiet` | Only warnings/errors |
-| `--sort` | Sort alphabetically |
-| `--strict` | Strict validation mode for `check` |
-| `--style <name>` | Placeholder style for `example`: bracket, dummy, empty |
-| `-h, --help` | Help |
-| `-v, --version` | Version |
+| `--quiet` | Only show warnings and errors (suppresses headers/summary) |
+| `--sort` | Sort variables alphabetically |
+| `--strict` | Strict mode for `check` (fails on placeholders) |
+| `--style <name>` | Placeholder style for `example`: `bracket`, `dummy`, `empty` |
+| `-h, --help` | Show help |
+| `-v, --version` | Show version |
 
-## Commands
+## How the Masking Works
 
-### 1. Diff environments (`envpeek diff`)
+- **Heuristic secret detection**: Scans key names against 20+ patterns (`API_KEY`, `SECRET`, `TOKEN`, `PASSWORD`, `PRIVATE_KEY`, `DATABASE_URL`, `JWT_SECRET`, `AWS_`, `STRIPE_`, etc.) and evaluates values for high-entropy tokens and recognizable credential structures.
+- **Safe display**: Sensitive values show only a 2–3 character prefix followed by bullets (e.g. `sk_••••••••••••••••`), short values (<=4 chars) are fully masked (`••••`), and multiline secrets are completely redacted (`********`). Non-sensitive values (`PORT=3000`) remain visible.
+- **100% local — zero network calls**: Verified fully offline. There are zero HTTP requests, zero telemetry, zero analytics, and zero runtime dependencies. Everything runs strictly in memory on your machine.
 
-Compare two environment files to catch missing keys, extra keys, or configuration drift without leaking secrets:
+## What It Does NOT Do
 
-```bash
-envpeek diff .env.example .env
-envpeek diff .env.local .env.production
-```
+- It does **not** edit, write to, or overwrite your `.env` files (strictly read-only inspection).
+- It does **not** make network calls or transmit your secrets anywhere.
+- It does **not** execute shell commands or evaluate code (pure parser, not an evaluator).
+- It does **not** cache or persist secrets to disk.
 
-### 2. Generate `.env.example` template (`envpeek example`)
+## Links
 
-Generate a clean `.env.example` directly from your `.env` with structure, comments, and safe placeholders:
-
-```bash
-envpeek example .env > .env.example
-envpeek example --style dummy .env
-```
-
-### 3. Validate and lint (`envpeek check`)
-
-Audit your `.env` for invalid ports, malformed URLs/URIs, unconfigured placeholders (`CHANGEME`, `TODO`, `<your-key>`), and empty secrets:
-
-```bash
-envpeek check .env
-envpeek check .env --strict
-```
-
-### Reveal values
-
-```bash
-envpeek --show
-```
-
-Shows:
-
-```
-⚠ WARNING: You are displaying environment values.
-  Make sure your terminal output is not being logged or shared.
-```
-
-`--json --show` also reveals in JSON. Without `--show`, JSON is masked.
-
-### JSON output
-
-```bash
-envpeek --json
-```
-
-```json
-{
-  "file": ".env",
-  "variables": [
-    { "key": "PORT", "value": "3000", "sensitive": false, "empty": false },
-    { "key": "API_KEY", "value": "sk-••••••••••••", "sensitive": true, "empty": false }
-  ],
-  "summary": { "total": 2, "sensitive": 1, "empty": 0 }
-}
-```
-
-### Disable colors
-
-```bash
-envpeek --no-color
-NO_COLOR=1 envpeek
-```
-
-Automatically disabled when stdout is not a TTY or when piped.
-
-## Secret detection
-
-Heuristic, case-insensitive name matching:
-
-`API_KEY`, `SECRET`, `TOKEN`, `PASSWORD`, `PRIVATE_KEY`, `DATABASE_URL`, `JWT_SECRET`, `AWS_SECRET`, `STRIPE_SECRET`, `OPENAI_API`, `GITHUB_TOKEN`, etc.
-
-> **Note:** Detection is heuristic and not a security scanner. A variable like `MY_VALUE=abc123` may still be sensitive. The safety comes from masking — not from perfect detection.
-
-## Masking
-
-```ts
-maskValue("token_live_123456789abcdef") // → "to••••••••••••"
-maskValue("abc")                     // → "••••"
-maskValue("-----BEGIN...")           // multiline → "********"
-```
-
-Short values are fully masked. Long values show 2–3 char prefix + bullets. Multiline always `********`.
-
-## Supported `.env` syntax
-
-```env
-PORT=3000
-NODE_ENV=development
-API_KEY=secret
-NAME="Paras"
-MESSAGE='hello world'
-EMPTY=
-PORT = 3000
-# comment
-KEY=value # inline comment
-
-# multiline
-PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
-...
------END PRIVATE KEY-----"
-```
-
-- `KEY=value`, `KEY="value"`, `KEY='value'`, `KEY=`
-- Whitespace around `=`
-- `#` comments and `value # inline comment`
-- Escaped double quotes: `"hello \"world\""`
-- `\n`, `\r`, `\t`, `\"`, `\\` in double quotes
-- Multiline quoted values
-
-Not shell execution — `$(rm -rf ...)` is treated as plain text.
-
-## Security
-
-- **No network requests** — fully offline, no telemetry, no analytics
-- **No disk writes** — never stores secrets
-- **Masked by default** — errors never include raw values
-- **No execution** — parser only, not a shell
-- `--show` requires explicit opt-in with warning
-
-## Exit codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | General error |
-| 2 | Invalid CLI usage |
-| 3 | File not found |
-
-## Programmatic API
-
-```ts
-import { parseEnv, maskValue, detectSecret, formatTable } from "environmental-peek";
-
-const { entries } = parseEnv('PORT=3000\nAPI_KEY=secret');
-detectSecret("API_KEY"); // true
-maskValue("secret123");  // "se••••••••"
-```
-
-Exports: `parseEnv`, `maskValue`, `detectSecret`, `formatTable`, `formatJson`, `getSummary`, `readEnvFile`, `resolveEnvFile`
-
-## CI usage
-
-Safe in CI — secrets masked:
-
-```bash
-npx envpeek --json > env-report.json
-# or validate existence
-npx envpeek --quiet || echo "missing .env"
-```
-
-Never use `--show` in CI logs.
-
-## Development
-
-```bash
-npm install
-npm test
-npm run test:run
-npm run typecheck
-npm run lint
-npm run build
-```
-
-## Publishing
-
-```bash
-npm run typecheck && npm run lint && npm run test:run && npm run build
-npm pack --dry-run
-npm publish
-```
-
-## Roadmap
-
-- [ ] `envpeek check` — compare `.env.example` vs `.env`
-- [ ] Duplicate detection
-- [ ] Variable search/filter
-- [ ] Shell completions
+- **GitHub Repository**: [github.com/parasraju/environmental-peek](https://github.com/parasraju/environmental-peek)
+- **npm Package**: [npmjs.com/package/environmental-peek](https://www.npmjs.com/package/environmental-peek)
+- **Issue Tracker**: [github.com/parasraju/environmental-peek/issues](https://github.com/parasraju/environmental-peek/issues)
 
 ## License
 
