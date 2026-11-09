@@ -5,6 +5,8 @@ Safely inspect your `.env` files without leaking secrets — environmental peek
 ```
 $ envpeek
 
+envpeek
+
 Environment: .env
 ────────────────────────────────────────
 
@@ -18,14 +20,33 @@ Environment: .env
 5 variables • 3 hidden • 2 visible • 1 empty
 ```
 
-Missing variables can also be checked against `.env.example`:
+Compare two files (base first, target second; defaults to `.env.example` vs `.env`):
 
 ```
-$ envpeek diff
+$ envpeek diff .env.example .env2
 
-Missing in .env (1):
+envpeek diff
+
+Base:   .env.example
+Target: .env2
+────────────────────────────────────────
+
+Missing in .env2 (1):
   - 🔒 STRIPE_SECRET_KEY: sk_••••••••••••••••
+
+Changed (1):
+  ~ 🔒 DATABASE_URL: pos•••••••••••••••• -> ••••
+
+Identical (3):
+  = 🔒 API_KEY: sk_••••••••••••••••
+  =   PORT: 3000
+  =   NODE_ENV: development
+
+────────────────────────────────────────
+1 missing • 1 changed • 3 identical
 ```
+
+`diff` exits with code 1 when the files differ, 0 when they match.
 
 ---
 
@@ -70,24 +91,19 @@ envpeek example .env             # Generate clean .env.example with placeholders
 | `-h, --help` | Show help |
 | `-v, --version` | Show version |
 
+Lines like `export KEY=value` are read as `KEY`. Malformed lines, duplicate keys and unterminated quotes are reported as warnings on stderr and never crash the tool.
+
 ## How the Masking Works
 
-- **Heuristic secret detection**: Scans key names against 20+ patterns (`API_KEY`, `SECRET`, `TOKEN`, `PASSWORD`, `PRIVATE_KEY`, `DATABASE_URL`, `JWT_SECRET`, `AWS_`, `STRIPE_`, etc.) and evaluates values for high-entropy tokens and recognizable credential structures.
-- **Safe display**: Sensitive values show only a 2–3 character prefix followed by bullets (e.g. `sk_••••••••••••••••`), short values (<=4 chars) are fully masked (`••••`), and multiline secrets are completely redacted (`********`). Non-sensitive values (`PORT=3000`) remain visible.
-- **100% local — zero network calls**: Verified fully offline. There are zero HTTP requests, zero telemetry, zero analytics, and zero runtime dependencies. Everything runs strictly in memory on your machine.
-
-## What It Does NOT Do
-
-- It does **not** edit, write to, or overwrite your `.env` files (strictly read-only inspection).
-- It does **not** make network calls or transmit your secrets anywhere.
-- It does **not** execute shell commands or evaluate code (pure parser, not an evaluator).
-- It does **not** cache or persist secrets to disk.
+- **What is hidden**: variables whose key name matches secret patterns (`API_KEY`, `SECRET`, `TOKEN`, `PASSWORD`, `PRIVATE_KEY`, `DATABASE_URL`, `JWT`, `AWS_`, `STRIPE_`, ...), values that look like credentials, and any multiline value.
+- **What is shown**: a hidden value shows only its first 2–3 characters followed by bullets (`sk_••••••••••••••••`). Values of 4 characters or fewer are fully masked (`••••`), and multiline values are fully redacted (`********`). Non-secret values such as `PORT=3000` are shown as-is.
+- **Local only**: the source makes no network calls, spawns no processes, writes no files, and has no runtime dependencies. `.env` files are only read.
 
 ## Links
 
-- **GitHub Repository**: [github.com/parasraju/environmental-peek](https://github.com/parasraju/environmental-peek)
-- **npm Package**: [npmjs.com/package/environmental-peek](https://www.npmjs.com/package/environmental-peek)
-- **Issue Tracker**: [github.com/parasraju/environmental-peek/issues](https://github.com/parasraju/environmental-peek/issues)
+- [GitHub](https://github.com/parasraju/environmental-peek)
+- [npm](https://www.npmjs.com/package/environmental-peek)
+- [Issues](https://github.com/parasraju/environmental-peek/issues)
 
 ## License
 

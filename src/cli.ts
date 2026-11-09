@@ -9,7 +9,8 @@ import { validateEnv, formatValidation } from "./validator.js";
 import { filterEntries } from "./filter.js";
 import type { CliOptions } from "./types.js";
 
-const VERSION = "0.2.1";
+// Bug fix (v0.2.2): keep in sync with package.json (envpeek --version).
+const VERSION = "0.2.2";
 
 function printHelp(): void {
   const help = `

@@ -9,6 +9,12 @@ describe("parseEnv", () => {
     expect(entries[0].value).toBe("3000");
   });
 
+  it("accepts `export KEY=value` lines", () => {
+    const { entries, warnings } = parseEnv("export API_KEY=fake123\nPORT=1");
+    expect(entries.map((e) => e.key)).toEqual(["API_KEY", "PORT"]);
+    expect(warnings).toHaveLength(0);
+  });
+
   it('parses double quoted value', () => {
     const { entries } = parseEnv('NAME="Paras"');
     expect(entries[0].value).toBe("Paras");

@@ -30,7 +30,9 @@ export function parseEnv(content: string): ParseResult {
       continue;
     }
 
-    const keyPart = rawLine.slice(0, eqIndex).trim();
+    // Bug fix (v0.2.2): `export API_KEY=abc` was skipped as 'invalid key "export API_KEY"'.
+    // Repro: printf 'export API_KEY=abc\nPORT=1\n' | envpeek -  -> API_KEY missing from output.
+    const keyPart = rawLine.slice(0, eqIndex).trim().replace(/^export\s+/, "");
     let valuePart = rawLine.slice(eqIndex + 1);
 
     // Validate key
