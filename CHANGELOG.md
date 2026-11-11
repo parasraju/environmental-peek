@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-11-11
+
+### Added
+- `--example` flag alias for the `example` subcommand (`envpeek --example [file]`)
+- `-o, --output <path>` file output for `example` with a default no-clobber guard and `--force` to overwrite existing files
+
+### Changed
+- SEO and documentation: updated `package.json` description, added 8 search keywords (`.env`, `variables`, `config`, `secret-management`, `env-example`, `dotenv-example`, `env-file`, `env-vars`), and structured `README.md` headings and comparison table
+
 ## [0.2.1] - 2026-11-03
 
 ### Changed

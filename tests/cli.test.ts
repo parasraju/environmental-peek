@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -35,12 +35,15 @@ describe("CLI", () => {
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("envpeek");
     expect(r.stdout).toContain("Usage");
+    expect(r.stdout).toContain("--example");
+    expect(r.stdout).toContain("--output");
+    expect(r.stdout).toContain("--force");
   });
 
   it("shows version", () => {
     const r = runCli("--version");
     expect(r.status).toBe(0);
-    expect(r.stdout.trim()).toMatch(/0\.[12]\./);
+    expect(r.stdout.trim()).toBe("0.3.0");
   });
 
   it("errors on missing file", () => {
@@ -181,6 +184,147 @@ describe("CLI", () => {
     expect(r.stdout).toContain("PORT=3000");
     expect(r.stdout).toContain("API_KEY=<your-api_key>");
     expect(r.stdout).not.toContain("supersecret");
+  });
+
+  it("supports --example flag alias with identical output to example subcommand", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, "# Config\nPORT=3000\nAPI_KEY=sk_test_fake123\nNODE_ENV=development");
+    const subRes = runCli(`example ${file}`, tmpDir);
+    const flagRes = runCli(`--example ${file}`, tmpDir);
+    expect(flagRes.status).toBe(0);
+    expect(flagRes.stdout).toBe(subRes.stdout);
+
+    // Composes with --style and -f, and ignores --json
+    const styleRes = runCli(`--example -f ${file} --style dummy --json`, tmpDir);
+    expect(styleRes.status).toBe(0);
+    expect(styleRes.stdout).toContain("API_KEY=your_api_key_here");
+    expect(styleRes.stdout).not.toContain("sk_test_fake123");
+  });
+
+  it("errors when --example is combined with diff or check", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, "PORT=3000");
+    const diffRes = runCli(`diff ${file} ${file} --example`, tmpDir);
+    expect(diffRes.status).toBe(2);
+    expect(diffRes.stderr).toContain("Unknown option: --example");
+
+    const checkRes = runCli(`check ${file} --example`, tmpDir);
+    expect(checkRes.status).toBe(2);
+    expect(checkRes.stderr).toContain("Unknown option: --example");
+  });
+
+  it("writes example output file with -o / --output matching stdout", () => {
+    const file = join(tmpDir, ".env");
+    const outFile = join(tmpDir, ".env.example");
+    writeFileSync(file, "# App\r\nPORT=3000\r\nAPI_KEY=sk_test_fake123\r\nNODE_ENV=development");
+
+    const stdoutRes = runCli(`example ${file}`, tmpDir);
+    const writeRes = runCli(`example ${file} -o ${outFile}`, tmpDir);
+
+    expect(writeRes.status).toBe(0);
+    expect(writeRes.stdout.trim()).toBe(`Wrote 3 keys to ${outFile}`);
+    expect(existsSync(outFile)).toBe(true);
+
+    const written = readFileSync(outFile, "utf-8");
+    expect(written).toBe(stdoutRes.stdout);
+    expect(written).toContain("\r\n");
+    expect(written).not.toContain("sk_test_fake123");
+  });
+
+  it("refuses to clobber existing output file without --force and leaves it byte-identical", () => {
+    const file = join(tmpDir, ".env");
+    const outFile = join(tmpDir, ".env.example");
+    const originalContent = "# Hand-edited file\nCUSTOM_KEY=keep_me\n";
+    writeFileSync(file, "PORT=3000\nAPI_KEY=sk_test_fake123");
+    writeFileSync(outFile, originalContent);
+
+    const failRes = runCli(`--example ${file} -o ${outFile}`, tmpDir);
+    expect(failRes.status).toBe(1);
+    expect(failRes.stderr).toContain(`✗ ${outFile} already exists — use --force to overwrite`);
+    expect(readFileSync(outFile, "utf-8")).toBe(originalContent);
+
+    // Overwrites when --force is passed
+    const forceRes = runCli(`--example ${file} --output=${outFile} --force`, tmpDir);
+    expect(forceRes.status).toBe(0);
+    expect(forceRes.stdout.trim()).toBe(`Wrote 2 keys to ${outFile}`);
+    const updatedContent = readFileSync(outFile, "utf-8");
+    expect(updatedContent).toContain("PORT=3000");
+    expect(updatedContent).toContain("API_KEY=<your-api_key>");
+    expect(updatedContent).not.toContain("sk_test_fake123");
+  });
+
+  it("never leaks fake secret into written file or stdout", () => {
+    const file = join(tmpDir, ".env");
+    const outFile = join(tmpDir, ".env.example");
+    writeFileSync(file, "API_KEY=sk_test_fake123\nDATABASE_URL=postgres://user:fake_pass@localhost:5432/db");
+
+    const r = runCli(`--example ${file} -o=${outFile}`, tmpDir);
+    expect(r.status).toBe(0);
+    expect(r.stdout).not.toContain("sk_test_fake123");
+    expect(r.stdout).not.toContain("fake_pass");
+
+    const written = readFileSync(outFile, "utf-8");
+    expect(written).toContain("API_KEY=<your-api_key>");
+    expect(written).toContain("DATABASE_URL=<your-database_url>");
+    expect(written).not.toContain("sk_test_fake123");
+    expect(written).not.toContain("fake_pass");
+  });
+
+  it("prints note when --force is used without -o and still outputs to stdout", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, "PORT=3000\nAPI_KEY=sk_test_fake123");
+
+    const r = runCli(`--example ${file} --force`, tmpDir);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("Note: --force only applies with -o");
+    expect(r.stdout).toContain("PORT=3000");
+    expect(r.stdout).toContain("API_KEY=<your-api_key>");
+  });
+
+  it("errors when -o / --output is given with no value", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, "PORT=3000");
+
+    const r1 = runCli(`example ${file} -o`, tmpDir);
+    expect(r1.status).toBe(1);
+    expect(r1.stderr).toContain("✗ --output needs a path");
+
+    const r2 = runCli(`--example ${file} --output --force`, tmpDir);
+    expect(r2.status).toBe(1);
+    expect(r2.stderr).toContain("✗ --output needs a path");
+
+    const r3 = runCli(`--example ${file} -o=`, tmpDir);
+    expect(r3.status).toBe(1);
+    expect(r3.stderr).toContain("✗ --output needs a path");
+  });
+
+  it("errors when --output is used with diff or check", () => {
+    const file = join(tmpDir, ".env");
+    const outFile = join(tmpDir, "out.txt");
+    writeFileSync(file, "PORT=3000");
+
+    const diffRes = runCli(`diff ${file} ${file} --output ${outFile}`, tmpDir);
+    expect(diffRes.status).toBe(1);
+    expect(diffRes.stderr).toContain("Unknown option: --output");
+    expect(existsSync(outFile)).toBe(false);
+
+    const checkRes = runCli(`check ${file} -o ${outFile}`, tmpDir);
+    expect(checkRes.status).toBe(1);
+    expect(checkRes.stderr).toContain("Unknown option: --output");
+    expect(existsSync(outFile)).toBe(false);
+  });
+
+  it("errors cleanly on bad output directory without leaving partial files", () => {
+    const file = join(tmpDir, ".env");
+    const badOut = join(tmpDir, "nonexistent_dir", ".env.example");
+    writeFileSync(file, "PORT=3000\nAPI_KEY=sk_test_fake123");
+
+    const r = runCli(`example ${file} -o ${badOut}`, tmpDir);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toBe("");
+    expect(r.stderr).toContain("✗ Failed to write");
+    const filesInTmp = readdirSync(tmpDir);
+    expect(filesInTmp).toEqual([".env"]);
   });
 
   it("supports check subcommand", () => {

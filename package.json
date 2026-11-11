@@ -1,7 +1,7 @@
 {
   "name": "environmental-peek",
-  "version": "0.2.2",
-  "description": "Safely inspect your .env files without leaking secrets — environmental peek",
+  "version": "0.3.0",
+  "description": "Safely inspect .env files without leaking secrets — mask values, diff against .env.example, generate .env.example",
   "type": "module",
   "bin": {
     "environmental-peek": "dist/cli.js",
@@ -44,7 +44,15 @@
     "security",
     "environment",
     "envpeek",
-    "secrets"
+    "secrets",
+    ".env",
+    "variables",
+    "config",
+    "secret-management",
+    "env-example",
+    "dotenv-example",
+    "env-file",
+    "env-vars"
   ],
   "author": "",
   "license": "MIT",

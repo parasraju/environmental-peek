@@ -1,6 +1,44 @@
 # environmental-peek
 
-Safely inspect your `.env` files without leaking secrets — environmental peek
+Safely inspect .env files without leaking secrets — mask values, diff against .env.example, generate .env.example
+
+## Install
+
+```bash
+# Global install (provides `envpeek` and `environmental-peek`)
+npm install -g environmental-peek
+
+# Or run directly with npx
+npx envpeek
+```
+
+## Generate .env.example
+
+Use `envpeek` as a dotenv example generator to generate .env.example templates directly from your local environment file. You can create .env.example from .env with safe placeholders while keeping non-secret defaults, comments, and blank lines intact:
+
+```bash
+envpeek --example .env                       # Print generated .env.example to stdout
+envpeek example .env -o .env.example         # Write directly to .env.example (no-clobber by default)
+envpeek --example .env -o .env.example       # Flag alias + file output
+envpeek example .env -o .env.example --force # Overwrite an existing .env.example
+envpeek --example .env --style dummy         # Styles: bracket (default), dummy, empty
+```
+
+By default, `-o` / `--output` refuses to overwrite an existing file unless `--force` is passed.
+
+## Check .env against .env.example
+
+Quickly check .env missing variables, invalid ports or URLs, and leftover placeholder values before starting your app:
+
+```bash
+envpeek check .env               # Validate types, URLs, ports, and placeholders
+envpeek check .env --strict      # Fail if placeholder values remain in .env
+envpeek diff .env.example .env   # Check .env against .env.example for missing keys
+```
+
+## Mask secrets
+
+`envpeek` lets you mask secrets in terminal output so you can inspect configuration during debugging or screen-sharing without leaking secrets:
 
 ```
 $ envpeek
@@ -20,7 +58,18 @@ Environment: .env
 5 variables • 3 hidden • 2 visible • 1 empty
 ```
 
-Compare two files (base first, target second; defaults to `.env.example` vs `.env`):
+- **What is hidden**: variables whose key name matches secret patterns (`API_KEY`, `SECRET`, `TOKEN`, `PASSWORD`, `PRIVATE_KEY`, `DATABASE_URL`, `JWT`, `AWS_`, `STRIPE_`, ...), values that look like credentials, and any multiline value.
+- **What is shown**: a hidden value shows only its first 2–3 characters followed by bullets (`sk_••••••••••••••••`). Values of 4 characters or fewer are fully masked (`••••`), and multiline values are fully redacted (`********`). Non-secret values such as `PORT=3000` are shown as-is.
+- **Local only**: the source makes no network calls, spawns no processes, writes no files unless `-o` / `--output` is passed with `example`, and has no runtime dependencies.
+
+## Diff .env files
+
+Compare two environment files to diff .env files (base first, target second; defaults to `.env.example` vs `.env`) while keeping secret values masked:
+
+```bash
+envpeek diff .env.example .env
+envpeek diff .env .env.example
+```
 
 ```
 $ envpeek diff .env.example .env2
@@ -48,18 +97,6 @@ Identical (3):
 
 `diff` exits with code 1 when the files differ, 0 when they match.
 
----
-
-## Install
-
-```bash
-# Global install (provides `envpeek` and `environmental-peek`)
-npm install -g environmental-peek
-
-# Or run directly with npx
-npx envpeek
-```
-
 ## Usage
 
 ```bash
@@ -67,11 +104,6 @@ envpeek                     # Inspect .env in current directory
 envpeek .env.local          # Inspect a specific file
 envpeek -f ./config/.env    # Specify file path with -f / --file
 cat .env | envpeek -        # Read from stdin
-
-# Subcommands
-envpeek diff .env.example .env   # Compare two env files for missing or extra keys
-envpeek check .env               # Validate types, URLs, ports, and placeholders
-envpeek example .env             # Generate clean .env.example with placeholders
 ```
 
 ### Options
@@ -79,6 +111,9 @@ envpeek example .env             # Generate clean .env.example with placeholders
 | Flag | Description |
 |------|-------------|
 | `-f, --file <path>` | Specify env file path (default: `.env`) |
+| `--example` | Alias for the `example` subcommand (generate `.env.example`) |
+| `-o, --output <path>` | Write generated `.env.example` to file instead of stdout |
+| `--force` | Overwrite an existing output file (with `-o`) |
 | `--filter <query>` | Filter variables by substring match (key or value) |
 | `-k, --key <name>` | Lookup a specific key exactly |
 | `--show` / `--raw` | Reveal secret values in terminal output (with security warning) |
@@ -93,11 +128,17 @@ envpeek example .env             # Generate clean .env.example with placeholders
 
 Lines like `export KEY=value` are read as `KEY`. Malformed lines, duplicate keys and unterminated quotes are reported as warnings on stderr and never crash the tool.
 
-## How the Masking Works
+## Why envpeek
 
-- **What is hidden**: variables whose key name matches secret patterns (`API_KEY`, `SECRET`, `TOKEN`, `PASSWORD`, `PRIVATE_KEY`, `DATABASE_URL`, `JWT`, `AWS_`, `STRIPE_`, ...), values that look like credentials, and any multiline value.
-- **What is shown**: a hidden value shows only its first 2–3 characters followed by bullets (`sk_••••••••••••••••`). Values of 4 characters or fewer are fully masked (`••••`), and multiline values are fully redacted (`********`). Non-secret values such as `PORT=3000` are shown as-is.
-- **Local only**: the source makes no network calls, spawns no processes, writes no files, and has no runtime dependencies. `.env` files are only read.
+`dotenv` loads environment variables into `process.env`, `dotenv-linter` lints `.env` files, and `dotenv-cli` runs commands with environment variables loaded. `envpeek` focuses on safe terminal inspection, diffing, and `.env.example` generation:
+
+| feature | envpeek | dotenv | dotenv-linter | dotenv-cli |
+|---------|---------|--------|---------------|------------|
+| generate .env.example | Yes (`--example`, `-o`) | — | — | — |
+| check .env vs .env.example | Yes (`diff`, `check`) | — | — | — |
+| diff .env files | Yes (`envpeek diff`) | — | — | — |
+| mask secrets in output | Yes (default) | — | — | — |
+| inspect .env safely | Yes | — | — | — |
 
 ## Links
 

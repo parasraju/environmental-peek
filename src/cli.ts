@@ -1,5 +1,5 @@
-import { readFileSync, existsSync } from "node:fs";
-import { resolve, isAbsolute } from "node:path";
+import { readFileSync, existsSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
+import { resolve, isAbsolute, dirname, join } from "node:path";
 import { parseEnv } from "./parser.js";
 import { readFromStdin } from "./scanner.js";
 import { formatTable, formatJson } from "./formatter.js";
@@ -10,7 +10,7 @@ import { filterEntries } from "./filter.js";
 import type { CliOptions } from "./types.js";
 
 // Bug fix (v0.2.2): keep in sync with package.json (envpeek --version).
-const VERSION = "0.2.2";
+const VERSION = "0.3.0";
 
 function printHelp(): void {
   const help = `
@@ -32,6 +32,9 @@ Arguments:
 
 Options:
   -f, --file <path>       Specify env file path
+  --example               Alias for the example subcommand (generate .env.example)
+  -o, --output <path>     Write generated example to file instead of stdout
+  --force                 Overwrite an existing output file (with -o)
   --filter <query>        Filter variables matching query (key or value)
   -k, --key <name>        Lookup a specific key exactly
   --show                  Reveal secret values (use with caution)
@@ -51,7 +54,8 @@ Examples:
   envpeek --filter API
   envpeek -k DATABASE_URL
   envpeek diff .env.example .env
-  envpeek example .env > .env.example
+  envpeek example .env -o .env.example
+  envpeek --example .env > .env.example
   envpeek check .env --strict
   cat .env | envpeek -
 
@@ -62,8 +66,15 @@ Security:
   console.log(help);
 }
 
-function parseArgs(argv: string[]): CliOptions & { positionalFile?: string; positionalFile2?: string } {
-  const opts: CliOptions & { positionalFile?: string; positionalFile2?: string } = {
+type ParsedCliOptions = CliOptions & {
+  positionalFile?: string;
+  positionalFile2?: string;
+  output?: string;
+  force?: boolean;
+};
+
+function parseArgs(argv: string[]): ParsedCliOptions {
+  const opts: ParsedCliOptions = {
     show: false,
     raw: false,
     json: false,
@@ -114,7 +125,43 @@ function parseArgs(argv: string[]): CliOptions & { positionalFile?: string; posi
     } else if (arg === "--strict") {
       opts.strict = true;
     } else if (arg === "--check") {
+      if (opts.command === "diff" || opts.command === "example") {
+        console.error(`✗ Unknown option: ${arg}`);
+        console.error(`Try: envpeek --help`);
+        process.exit(2);
+      }
       opts.command = "check";
+    } else if (arg === "--example") {
+      if (opts.command === "diff" || opts.command === "check") {
+        console.error(`✗ Unknown option: ${arg}`);
+        console.error(`Try: envpeek --help`);
+        process.exit(2);
+      }
+      opts.command = "example";
+    } else if (arg === "--force") {
+      opts.force = true;
+    } else if (arg === "-o" || arg === "--output") {
+      const next = args[i + 1];
+      if (!next || next.startsWith("-")) {
+        console.error("✗ --output needs a path");
+        process.exit(1);
+      }
+      opts.output = next;
+      i++;
+    } else if (arg.startsWith("--output=")) {
+      const val = arg.slice("--output=".length);
+      if (!val) {
+        console.error("✗ --output needs a path");
+        process.exit(1);
+      }
+      opts.output = val;
+    } else if (arg.startsWith("-o=")) {
+      const val = arg.slice("-o=".length);
+      if (!val) {
+        console.error("✗ --output needs a path");
+        process.exit(1);
+      }
+      opts.output = val;
     } else if (arg === "--filter") {
       const next = args[i + 1];
       if (!next || next.startsWith("-")) {
@@ -265,6 +312,16 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  if (opts.output !== undefined && opts.command !== "example") {
+    console.error("✗ Unknown option: --output (only supported with example)");
+    console.error("Try: envpeek --help");
+    process.exit(1);
+  }
+
+  if (opts.force && !opts.output) {
+    console.error("Note: --force only applies with -o");
+  }
+
   // Handle diff subcommand
   if (opts.command === "diff") {
     const baseFile = opts.positionalFile || ".env.example";
@@ -298,6 +355,52 @@ async function main(): Promise<void> {
     const example = generateExample(content, {
       placeholderStyle: opts.placeholderStyle || "bracket",
     });
+
+    if (opts.output) {
+      const resolvedOut = isAbsolute(opts.output)
+        ? opts.output
+        : resolve(process.cwd(), opts.output);
+
+      if (existsSync(resolvedOut) && !opts.force) {
+        console.error(
+          color(
+            `✗ ${opts.output} already exists — use --force to overwrite`,
+            "red",
+            useColor
+          )
+        );
+        process.exit(1);
+      }
+
+      const outDir = dirname(resolvedOut);
+      const tmpFile = join(
+        outDir,
+        `.envpeek-tmp-${process.pid}-${Date.now()}`
+      );
+      try {
+        writeFileSync(tmpFile, example + "\n", "utf-8");
+        renameSync(tmpFile, resolvedOut);
+      } catch (err) {
+        try {
+          if (existsSync(tmpFile)) unlinkSync(tmpFile);
+        } catch {
+          // ignore cleanup error
+        }
+        console.error(
+          color(
+            `✗ Failed to write ${opts.output}: ${(err as Error).message}`,
+            "red",
+            useColor
+          )
+        );
+        process.exit(1);
+      }
+
+      const keyCount = parseEnv(content).entries.length;
+      console.log(`Wrote ${keyCount} keys to ${opts.output}`);
+      process.exit(0);
+    }
+
     console.log(example);
     process.exit(0);
   }
