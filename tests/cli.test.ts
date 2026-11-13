@@ -38,12 +38,13 @@ describe("CLI", () => {
     expect(r.stdout).toContain("--example");
     expect(r.stdout).toContain("--output");
     expect(r.stdout).toContain("--force");
+    expect(r.stdout).toContain("example .env --json");
   });
 
   it("shows version", () => {
     const r = runCli("--version");
     expect(r.status).toBe(0);
-    expect(r.stdout.trim()).toBe("0.3.0");
+    expect(r.stdout.trim()).toBe("0.4.0");
   });
 
   it("errors on missing file", () => {
@@ -194,8 +195,8 @@ describe("CLI", () => {
     expect(flagRes.status).toBe(0);
     expect(flagRes.stdout).toBe(subRes.stdout);
 
-    // Composes with --style and -f, and ignores --json
-    const styleRes = runCli(`--example -f ${file} --style dummy --json`, tmpDir);
+    // Composes with --style and -f. Text output (no --json) stays the v0.3.0 lines.
+    const styleRes = runCli(`--example -f ${file} --style dummy`, tmpDir);
     expect(styleRes.status).toBe(0);
     expect(styleRes.stdout).toContain("API_KEY=your_api_key_here");
     expect(styleRes.stdout).not.toContain("sk_test_fake123");
@@ -325,6 +326,179 @@ describe("CLI", () => {
     expect(r.stderr).toContain("✗ Failed to write");
     const filesInTmp = readdirSync(tmpDir);
     expect(filesInTmp).toEqual([".env"]);
+  });
+
+  it("prints byte-identical text example output without --json", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, "PORT=3000\nAPI_KEY=sk_test_fake123\n");
+    const r = runCli(`example ${file}`, tmpDir);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe("PORT=3000\nAPI_KEY=<your-api_key>\n\n");
+    expect(r.stdout).not.toContain("sk_test_fake123");
+  });
+
+  it("example --json prints variables in file order with placeholder flags", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, "API_KEY=sk_test_fake123\nPORT=3000\n");
+    const r = runCli(`example ${file} --json`, tmpDir);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+    const obj = JSON.parse(r.stdout);
+    expect(obj).toEqual({
+      file,
+      style: "bracket",
+      keys: 2,
+      variables: [
+        { key: "API_KEY", value: "<your-api_key>", sensitive: true, placeholder: true },
+        { key: "PORT", value: "3000", sensitive: false, placeholder: false },
+      ],
+    });
+    expect(r.stdout).toContain("\n  ");
+    expect(r.stdout).not.toContain("sk_test_fake123");
+
+    const alias = runCli(`--example ${file} --json`, tmpDir);
+    expect(alias.status).toBe(0);
+    expect(alias.stdout).toBe(r.stdout);
+  });
+
+  it("example --json keys match the text example keys in order", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(
+      file,
+      "# comment\nPORT=3000\n\nAPI_KEY=sk_test_fake123\nNODE_ENV=development\n"
+    );
+    const text = runCli(`example ${file}`, tmpDir);
+    const json = runCli(`example ${file} --json`, tmpDir);
+    expect(text.status).toBe(0);
+    expect(json.status).toBe(0);
+
+    const textKeys = text.stdout
+      .split(/\r?\n/)
+      .filter((line) => line.trim() !== "" && !line.trim().startsWith("#") && line.includes("="))
+      .map((line) => line.slice(0, line.indexOf("=")).trim().replace(/^export\s+/, ""));
+    const obj = JSON.parse(json.stdout);
+    expect(obj.variables.map((v: { key: string }) => v.key)).toEqual(textKeys);
+    expect(obj.keys).toBe(textKeys.length);
+
+    const textByKey = new Map(
+      text.stdout
+        .split(/\r?\n/)
+        .filter((line) => line.includes("=") && !line.trim().startsWith("#"))
+        .map((line) => {
+          const eq = line.indexOf("=");
+          return [line.slice(0, eq).trim(), line.slice(eq + 1)] as const;
+        })
+    );
+    for (const variable of obj.variables as Array<{ key: string; value: string }>) {
+      expect(textByKey.get(variable.key)).toBe(variable.value);
+    }
+  });
+
+  it("example --json never includes a fake secret, with or without --show, on stdout or -o", () => {
+    const file = join(tmpDir, ".env");
+    const secret = "sk_test_fake123";
+    writeFileSync(file, `API_KEY=${secret}\nPORT=3000\n`);
+
+    const plain = runCli(`example ${file} --json`, tmpDir);
+    const shown = runCli(`example ${file} --json --show`, tmpDir);
+    expect(plain.status).toBe(0);
+    expect(shown.status).toBe(0);
+    expect(plain.stdout).toBe(shown.stdout);
+    expect(plain.stdout).not.toContain(secret);
+    expect(shown.stdout).not.toContain(secret);
+    expect(plain.stderr).not.toContain(secret);
+    expect(shown.stderr).not.toContain(secret);
+
+    const outPlain = join(tmpDir, "plain.json");
+    const outShown = join(tmpDir, "shown.json");
+    const writePlain = runCli(`example ${file} --json -o ${outPlain}`, tmpDir);
+    const writeShown = runCli(`example ${file} --json --show -o ${outShown}`, tmpDir);
+    expect(writePlain.status).toBe(0);
+    expect(writeShown.status).toBe(0);
+    const plainFile = readFileSync(outPlain, "utf-8");
+    const shownFile = readFileSync(outShown, "utf-8");
+    expect(plainFile).not.toContain(secret);
+    expect(shownFile).not.toContain(secret);
+    expect(JSON.parse(plainFile).variables[0].value).toBe("<your-api_key>");
+    expect(JSON.parse(shownFile).variables[0].value).toBe("<your-api_key>");
+  });
+
+  it("example --json applies dummy and empty placeholder styles", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, "API_KEY=sk_test_fake123\nPORT=3000\n");
+
+    const dummy = runCli(`example ${file} --json --style dummy`, tmpDir);
+    expect(dummy.status).toBe(0);
+    const dummyObj = JSON.parse(dummy.stdout);
+    expect(dummyObj.style).toBe("dummy");
+    expect(dummyObj.variables[0]).toEqual({
+      key: "API_KEY",
+      value: "your_api_key_here",
+      sensitive: true,
+      placeholder: true,
+    });
+    expect(dummyObj.variables[1].value).toBe("3000");
+    expect(dummyObj.variables[1].placeholder).toBe(false);
+    expect(dummy.stdout).not.toContain("sk_test_fake123");
+
+    const empty = runCli(`example ${file} --json --style empty`, tmpDir);
+    expect(empty.status).toBe(0);
+    const emptyObj = JSON.parse(empty.stdout);
+    expect(emptyObj.style).toBe("empty");
+    expect(emptyObj.variables[0]).toEqual({
+      key: "API_KEY",
+      value: "",
+      sensitive: true,
+      placeholder: true,
+    });
+    expect(emptyObj.variables[1]).toEqual({
+      key: "PORT",
+      value: "3000",
+      sensitive: false,
+      placeholder: false,
+    });
+    expect(empty.stdout).not.toContain("sk_test_fake123");
+  });
+
+  it("example --json -o writes JSON, refuses to clobber, and overwrites with --force", () => {
+    const file = join(tmpDir, ".env");
+    const outFile = join(tmpDir, "env.json");
+    writeFileSync(file, "API_KEY=sk_test_fake123\nPORT=3000\n");
+
+    const writeRes = runCli(`example ${file} --json -o ${outFile}`, tmpDir);
+    expect(writeRes.status).toBe(0);
+    expect(writeRes.stdout.trim()).toBe(`Wrote 2 keys to ${outFile}`);
+    const written = readFileSync(outFile, "utf-8");
+    const obj = JSON.parse(written);
+    expect(obj.keys).toBe(2);
+    expect(obj.variables.map((v: { key: string }) => v.key)).toEqual(["API_KEY", "PORT"]);
+    expect(written).not.toContain("sk_test_fake123");
+    expect(writeRes.stdout).not.toContain("sk_test_fake123");
+
+    const original = readFileSync(outFile);
+    const failRes = runCli(`example ${file} --json -o ${outFile}`, tmpDir);
+    expect(failRes.status).toBe(1);
+    expect(failRes.stderr).toContain(`✗ ${outFile} already exists — use --force to overwrite`);
+    expect(readFileSync(outFile)).toEqual(original);
+
+    const forceRes = runCli(`example ${file} --json --output ${outFile} --force`, tmpDir);
+    expect(forceRes.status).toBe(0);
+    expect(forceRes.stdout.trim()).toBe(`Wrote 2 keys to ${outFile}`);
+    const updated = JSON.parse(readFileSync(outFile, "utf-8"));
+    expect(updated.variables[0].value).toBe("<your-api_key>");
+    expect(updated.variables[1].value).toBe("3000");
+  });
+
+  it("example --json on an empty .env prints keys 0 and an empty variables array", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, "");
+    const r = runCli(`example ${file} --json`, tmpDir);
+    expect(r.status).toBe(0);
+    const obj = JSON.parse(r.stdout);
+    expect(obj.keys).toBe(0);
+    expect(obj.variables).toEqual([]);
+    expect(obj.file).toBe(file);
+    expect(obj.style).toBe("bracket");
   });
 
   it("supports check subcommand", () => {

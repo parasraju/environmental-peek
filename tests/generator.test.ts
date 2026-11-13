@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   generateExample,
+  buildExampleJson,
   getPlaceholder,
   generatePlaceholder,
 } from "../src/generator.js";
@@ -221,6 +222,44 @@ PORT=3000`;
 
     it("handles empty string input", () => {
       expect(generateExample("")).toBe("");
+    });
+  });
+
+  describe("example JSON", () => {
+    it("matches text keys and placeholder values without leaking a fake secret", () => {
+      const env = "API_KEY=sk_test_fake123\nPORT=3000\n";
+      const doc = buildExampleJson(env, ".env");
+      expect(doc).toEqual({
+        file: ".env",
+        style: "bracket",
+        keys: 2,
+        variables: [
+          { key: "API_KEY", value: "<your-api_key>", sensitive: true, placeholder: true },
+          { key: "PORT", value: "3000", sensitive: false, placeholder: false },
+        ],
+      });
+      expect(JSON.stringify(doc)).not.toContain("sk_test_fake123");
+
+      const text = generateExample(env);
+      const textKeys = text
+        .split("\n")
+        .filter((line) => line.includes("="))
+        .map((line) => line.slice(0, line.indexOf("=")));
+      expect(doc.variables.map((v) => v.key)).toEqual(textKeys);
+    });
+
+    it("applies dummy and empty styles and keeps an empty file valid", () => {
+      const env = "API_KEY=sk_test_fake123\nPORT=3000";
+      expect(buildExampleJson(env, ".env", { placeholderStyle: "dummy" }).variables[0].value).toBe(
+        "your_api_key_here"
+      );
+      expect(buildExampleJson(env, ".env", { placeholderStyle: "empty" }).variables[0].value).toBe("");
+      expect(buildExampleJson("", ".env")).toEqual({
+        file: ".env",
+        style: "bracket",
+        keys: 0,
+        variables: [],
+      });
     });
   });
 

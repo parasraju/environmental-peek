@@ -4,13 +4,13 @@ import { parseEnv } from "./parser.js";
 import { readFromStdin } from "./scanner.js";
 import { formatTable, formatJson } from "./formatter.js";
 import { diffEnvs, formatDiff, formatDiffJson } from "./diff.js";
-import { generateExample } from "./generator.js";
+import { generateExample, buildExampleJson } from "./generator.js";
 import { validateEnv, formatValidation } from "./validator.js";
 import { filterEntries } from "./filter.js";
 import type { CliOptions } from "./types.js";
 
 // Bug fix (v0.2.2): keep in sync with package.json (envpeek --version).
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 
 function printHelp(): void {
   const help = `
@@ -39,7 +39,7 @@ Options:
   -k, --key <name>        Lookup a specific key exactly
   --show                  Reveal secret values (use with caution)
   --raw                   Alias for --show (reveal raw values)
-  --json                  Output as JSON (secrets still masked by default)
+  --json                  Output as JSON (peek, diff, check, and example; secrets still masked)
   --no-color              Disable ANSI colors
   --quiet                 Only show warnings/errors
   --sort                  Sort variables alphabetically
@@ -55,6 +55,7 @@ Examples:
   envpeek -k DATABASE_URL
   envpeek diff .env.example .env
   envpeek example .env -o .env.example
+  envpeek example .env --json
   envpeek --example .env > .env.example
   envpeek check .env --strict
   cat .env | envpeek -
@@ -352,9 +353,16 @@ async function main(): Promise<void> {
   if (opts.command === "example") {
     const targetInput = getTargetFile(opts);
     const content = readEnvContent(targetInput, useColor);
-    const example = generateExample(content, {
+    const exampleOptions = {
       placeholderStyle: opts.placeholderStyle || "bracket",
-    });
+    } as const;
+    // Text path is unchanged when --json is absent. --show / --raw do not apply:
+    // example never reveals secret values.
+    const example = generateExample(content, exampleOptions);
+    const exampleDoc = opts.json
+      ? buildExampleJson(content, targetInput, exampleOptions)
+      : undefined;
+    const jsonOutput = exampleDoc ? JSON.stringify(exampleDoc, null, 2) : undefined;
 
     if (opts.output) {
       const resolvedOut = isAbsolute(opts.output)
@@ -377,8 +385,9 @@ async function main(): Promise<void> {
         outDir,
         `.envpeek-tmp-${process.pid}-${Date.now()}`
       );
+      const body = jsonOutput ?? example;
       try {
-        writeFileSync(tmpFile, example + "\n", "utf-8");
+        writeFileSync(tmpFile, body + "\n", "utf-8");
         renameSync(tmpFile, resolvedOut);
       } catch (err) {
         try {
@@ -396,12 +405,12 @@ async function main(): Promise<void> {
         process.exit(1);
       }
 
-      const keyCount = parseEnv(content).entries.length;
+      const keyCount = exampleDoc ? exampleDoc.keys : parseEnv(content).entries.length;
       console.log(`Wrote ${keyCount} keys to ${opts.output}`);
       process.exit(0);
     }
 
-    console.log(example);
+    console.log(jsonOutput ?? example);
     process.exit(0);
   }
 

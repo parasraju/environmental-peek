@@ -26,6 +26,38 @@ envpeek --example .env --style dummy         # Styles: bracket (default), dummy,
 
 By default, `-o` / `--output` refuses to overwrite an existing file unless `--force` is passed.
 
+## JSON output — machine-readable .env files
+
+JSON output turns .env to JSON for scripts and CI. Use it when you want an env file to JSON without parsing the text `.env.example` yourself. `envpeek example .env --json` prints one document: keys in file order, placeholders for sensitive keys, and kept defaults for everything else. `example` does not reveal secret values, with or without `--show`.
+
+```bash
+envpeek example .env --json
+```
+
+```json
+{
+  "file": ".env",
+  "style": "bracket",
+  "keys": 2,
+  "variables": [
+    {
+      "key": "API_KEY",
+      "value": "<your-api_key>",
+      "sensitive": true,
+      "placeholder": true
+    },
+    {
+      "key": "PORT",
+      "value": "3000",
+      "sensitive": false,
+      "placeholder": false
+    }
+  ]
+}
+```
+
+`-o` / `--output` writes the JSON to a file (`envpeek example .env --json -o env.json`). The same no-clobber guard applies: an existing file is left unchanged unless you pass `--force`. The `Wrote N keys to <path>` line is printed on stdout; the file itself is only the JSON document. `--style dummy` and `--style empty` change the placeholders in that JSON the same way they change a text `.env.example`.
+
 ## Check .env against .env.example
 
 Quickly check .env missing variables, invalid ports or URLs, and leftover placeholder values before starting your app:

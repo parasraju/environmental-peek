@@ -27,6 +27,8 @@ export {
 } from "./validator.js";
 export {
   generateExample,
+  buildExampleJson,
+  formatExampleJson,
   getPlaceholder,
   generatePlaceholder,
   type GenerateExampleOptions,
@@ -39,6 +41,8 @@ export type {
   CliOptions,
   Summary,
   JsonOutput,
+  ExampleJsonOutput,
+  ExampleJsonVariable,
   EnvDiffResult,
   EnvDiffChange,
   EnvDiffSummary,
