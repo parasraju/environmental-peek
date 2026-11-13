@@ -102,6 +102,20 @@ export interface GenerateExampleOptions {
   preserveNonSensitive?: boolean;
 }
 
+export interface ExampleJsonVariable {
+  key: string;
+  value: string;
+  sensitive: boolean;
+  placeholder: boolean;
+}
+
+export interface ExampleJsonOutput {
+  file: string;
+  style: PlaceholderStyle;
+  keys: number;
+  variables: ExampleJsonVariable[];
+}
+
 export type ExampleOptions = GenerateExampleOptions;
 
 

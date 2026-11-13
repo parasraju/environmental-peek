@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-11-13
+
+### Added
+- JSON output for `example` (`envpeek example .env --json`, including `-o` file output and `--style` support)
+- SEO: 2 new keywords (`json`, `json-output`) and a README JSON section
+
 ## [0.3.0] - 2026-11-11
 
 ### Added

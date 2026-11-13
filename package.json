@@ -1,6 +1,6 @@
 {
   "name": "environmental-peek",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Safely inspect .env files without leaking secrets — mask values, diff against .env.example, generate .env.example",
   "type": "module",
   "bin": {
@@ -52,7 +52,9 @@
     "env-example",
     "dotenv-example",
     "env-file",
-    "env-vars"
+    "env-vars",
+    "json",
+    "json-output"
   ],
   "author": "",
   "license": "MIT",

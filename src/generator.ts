@@ -1,6 +1,8 @@
 import { detectSecret } from "./masker.js";
 import type {
   EnvEntry,
+  ExampleJsonOutput,
+  ExampleJsonVariable,
   ParseResult,
   PlaceholderStyle,
   GenerateExampleOptions,
@@ -91,7 +93,18 @@ function generateFromString(
   content: string,
   options?: GenerateExampleOptions
 ): string {
-  if (content === "") return "";
+  return generateFromStringDetailed(content, options).text;
+}
+
+/**
+ * Same walk as the text generator. `variables` records the per-key decision
+ * (placeholder vs kept default) so JSON output cannot drift from the text.
+ */
+function generateFromStringDetailed(
+  content: string,
+  options?: GenerateExampleOptions
+): { text: string; variables: ExampleJsonVariable[] } {
+  if (content === "") return { text: "", variables: [] };
 
   const style = options?.placeholderStyle ?? "bracket";
   const preserveNonSensitive = options?.preserveNonSensitive ?? true;
@@ -99,6 +112,7 @@ function generateFromString(
   const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
   const lines = content.split(/\r?\n/);
   const resultLines: string[] = [];
+  const variables: ExampleJsonVariable[] = [];
 
   let i = 0;
   while (i < lines.length) {
@@ -202,8 +216,20 @@ function generateFromString(
           : " " + inlineComment
         : "";
       resultLines.push(`${keyPart}=${placeholder}${comment}`);
+      variables.push({
+        key: actualKey,
+        value: placeholder,
+        sensitive: true,
+        placeholder: true,
+      });
     } else if (preserveNonSensitive) {
       resultLines.push(rawLine);
+      variables.push({
+        key: actualKey,
+        value: keptDefault(valuePart, inlineComment),
+        sensitive: false,
+        placeholder: false,
+      });
     } else {
       const placeholder = getPlaceholder(actualKey, style);
       const comment = inlineComment
@@ -212,12 +238,57 @@ function generateFromString(
           : " " + inlineComment
         : "";
       resultLines.push(`${keyPart}=${placeholder}${comment}`);
+      variables.push({
+        key: actualKey,
+        value: placeholder,
+        sensitive: false,
+        placeholder: true,
+      });
     }
 
     i++;
   }
 
-  return resultLines.join(lineEnding);
+  return { text: resultLines.join(lineEnding), variables };
+}
+
+/**
+ * Structured .env.example for `example --json`. Values are the same placeholders
+ * or kept defaults the text generator writes. Sensitive keys never keep the
+ * original secret.
+ */
+export function buildExampleJson(
+  content: string,
+  file: string,
+  options?: GenerateExampleOptions
+): ExampleJsonOutput {
+  const style = options?.placeholderStyle ?? "bracket";
+  const { variables } = generateFromStringDetailed(content, {
+    ...options,
+    placeholderStyle: style,
+  });
+  return {
+    file,
+    style,
+    keys: variables.length,
+    variables,
+  };
+}
+
+export function formatExampleJson(
+  content: string,
+  file: string,
+  options?: GenerateExampleOptions
+): string {
+  return JSON.stringify(buildExampleJson(content, file, options), null, 2);
+}
+
+/** Value text exactly as it appears after `=`, without a trailing inline comment. */
+function keptDefault(valuePart: string, inlineComment: string): string {
+  if (inlineComment === "") return valuePart;
+  const idx = valuePart.lastIndexOf(inlineComment);
+  if (idx === -1) return valuePart;
+  return valuePart.slice(0, idx).replace(/[ \t]+$/, "");
 }
 
 function findEquals(line: string): number {
