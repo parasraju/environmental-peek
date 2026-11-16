@@ -39,12 +39,21 @@ describe("CLI", () => {
     expect(r.stdout).toContain("--output");
     expect(r.stdout).toContain("--force");
     expect(r.stdout).toContain("example .env --json");
+    expect(r.stdout).toContain("duplicate keys");
+    expect(r.stdout).toContain("bad quoting");
+  });
+
+  it("check --help mentions duplicate keys and bad quoting", () => {
+    const r = runCli("check --help");
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("duplicate keys");
+    expect(r.stdout).toContain("bad quoting");
   });
 
   it("shows version", () => {
     const r = runCli("--version");
     expect(r.status).toBe(0);
-    expect(r.stdout.trim()).toBe("0.4.0");
+    expect(r.stdout.trim()).toBe("0.5.0");
   });
 
   it("errors on missing file", () => {
@@ -508,5 +517,223 @@ describe("CLI", () => {
     expect(r.status).toBe(1); // invalid port
     expect(r.stdout).toContain("envpeek check");
     expect(r.stdout).toContain("valid-port");
+  });
+
+  it("check reports a duplicate key with both line numbers and never the values", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(
+      file,
+      ['API_KEY=dup-alpha-sentinel', "PORT=3000", 'NOTE="hash # inside is not a second key"', "API_KEY=dup-beta-sentinel"].join(
+        "\n"
+      )
+    );
+    const text = runCli(`check ${file} --no-color`, tmpDir);
+    expect(text.status).toBe(1);
+    expect(text.stdout).toContain("API_KEY");
+    expect(text.stdout).toContain("line 4:");
+    expect(text.stdout).toContain("lines 1, 4");
+    expect(text.stdout).toContain("the later value silently wins at runtime");
+    expect(text.stdout).toContain("[duplicate-key]");
+    expect(text.stdout).not.toContain("dup-alpha-sentinel");
+    expect(text.stdout).not.toContain("dup-beta-sentinel");
+    expect(text.stderr).not.toContain("dup-alpha-sentinel");
+    expect(text.stderr).not.toContain("dup-beta-sentinel");
+
+    const json = runCli(`check ${file} --json`, tmpDir);
+    expect(json.status).toBe(1);
+    expect(json.stdout).not.toContain("dup-alpha-sentinel");
+    expect(json.stdout).not.toContain("dup-beta-sentinel");
+    const dup = JSON.parse(json.stdout).errors.filter((e: { rule: string }) => e.rule === "duplicate-key");
+    expect(dup).toEqual([
+      {
+        key: "API_KEY",
+        line: 4,
+        type: "error",
+        message: "Duplicate key; the later value silently wins at runtime (lines 1, 4)",
+        rule: "duplicate-key",
+      },
+    ]);
+
+    const triple = join(tmpDir, "triple.env");
+    writeFileSync(triple, "TOKEN=one-sentinel\nTOKEN=two-sentinel\nTOKEN=three-sentinel\n");
+    const tripleRun = runCli(`check ${triple} --json`, tmpDir);
+    expect(tripleRun.status).toBe(1);
+    const tripleDups = JSON.parse(tripleRun.stdout).errors.filter((e: { rule: string }) => e.rule === "duplicate-key");
+    expect(tripleDups.map((e: { line: number }) => e.line)).toEqual([2, 3]);
+    expect(tripleRun.stdout).not.toContain("one-sentinel");
+    expect(tripleRun.stdout).not.toContain("two-sentinel");
+    expect(tripleRun.stdout).not.toContain("three-sentinel");
+  });
+
+  it("check reports unclosed quotes, mismatched quotes, and trailing characters", () => {
+    const unclosed = join(tmpDir, "unclosed.env");
+    writeFileSync(unclosed, 'SECRET="unclosed-sentinel\n');
+    const u = runCli(`check ${unclosed} --no-color`, tmpDir);
+    expect(u.status).toBe(1);
+    expect(u.stdout).toContain("line 1:");
+    expect(u.stdout).toContain("SECRET");
+    expect(u.stdout).toContain("Unclosed quote [unclosed-quote]");
+    expect(u.stdout).not.toContain("unclosed-sentinel");
+    expect(u.stdout).not.toContain("Mismatched quotes");
+
+    const unclosedSingle = join(tmpDir, "unclosed-single.env");
+    writeFileSync(unclosedSingle, "SECRET='unclosed-single-sentinel\n");
+    const us = runCli(`check ${unclosedSingle} --no-color`, tmpDir);
+    expect(us.status).toBe(1);
+    expect(us.stdout).toContain("Unclosed quote [unclosed-quote]");
+    expect(us.stdout).not.toContain("unclosed-single-sentinel");
+
+    const mismatch = join(tmpDir, "mismatch.env");
+    writeFileSync(mismatch, "TOKEN='mismatch-sentinel\"\n");
+    const m = runCli(`check ${mismatch} --no-color`, tmpDir);
+    expect(m.status).toBe(1);
+    expect(m.stdout).toContain("TOKEN");
+    expect(m.stdout).toContain("Mismatched quotes [mismatched-quotes]");
+    expect(m.stdout).not.toContain("mismatch-sentinel");
+
+    const mismatchOther = join(tmpDir, "mismatch-other.env");
+    writeFileSync(mismatchOther, "TOKEN=\"mismatch-other-sentinel'\n");
+    const mo = runCli(`check ${mismatchOther} --no-color`, tmpDir);
+    expect(mo.status).toBe(1);
+    expect(mo.stdout).toContain("Mismatched quotes [mismatched-quotes]");
+    expect(mo.stdout).not.toContain("mismatch-other-sentinel");
+
+    const trail = join(tmpDir, "trail.env");
+    writeFileSync(trail, 'NAME="trail-sentinel" trail-junk-sentinel\n');
+    const t = runCli(`check ${trail} --no-color`, tmpDir);
+    expect(t.status).toBe(1);
+    expect(t.stdout).toContain("NAME");
+    expect(t.stdout).toContain("Trailing characters after the closing quote [trailing-after-quote]");
+    expect(t.stdout).not.toContain("trail-sentinel");
+    expect(t.stdout).not.toContain("trail-junk-sentinel");
+
+    const ok = join(tmpDir, "ok.env");
+    writeFileSync(
+      ok,
+      [
+        'A="quoted-ok-sentinel"',
+        "B='single-ok-sentinel'",
+        "C=plain-ok-sentinel",
+        'D="comment-ok-sentinel" # comment',
+        "E='single-comment-ok' # note",
+        'F="escaped-ok-sentinel \\"end\\""',
+        'MULTI="line-one',
+        'line-two"',
+      ].join("\n")
+    );
+    const o = runCli(`check ${ok} --no-color`, tmpDir);
+    expect(o.status).toBe(0);
+    expect(o.stdout).toContain("No validation issues found");
+    expect(o.stdout).not.toContain("Unclosed quote");
+    expect(o.stdout).not.toContain("Mismatched quotes");
+    expect(o.stdout).not.toContain("Trailing characters");
+    expect(o.stdout).not.toContain("quoted-ok-sentinel");
+    expect(o.stdout).not.toContain("single-ok-sentinel");
+    expect(o.stdout).not.toContain("plain-ok-sentinel");
+    expect(o.stdout).not.toContain("comment-ok-sentinel");
+    expect(o.stdout).not.toContain("escaped-ok-sentinel");
+    expect(o.stdout).not.toContain("line-one");
+    expect(o.stdout).not.toContain("line-two");
+  });
+
+  it("check ignores a duplicate that appears only in a comment", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, "# API_KEY=commented-sentinel\nAPI_KEY=live-sentinel # API_KEY=after-hash-sentinel\n");
+    const r = runCli(`check ${file} --no-color`, tmpDir);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("No validation issues found");
+    expect(r.stdout).not.toContain("duplicate-key");
+    expect(r.stdout).not.toContain("Duplicate key");
+    expect(r.stdout).not.toContain("commented-sentinel");
+    expect(r.stdout).not.toContain("live-sentinel");
+    expect(r.stdout).not.toContain("after-hash-sentinel");
+
+    const json = runCli(`check ${file} --json`, tmpDir);
+    expect(json.status).toBe(0);
+    expect(JSON.parse(json.stdout).errors).toEqual([]);
+    expect(json.stdout).not.toContain("commented-sentinel");
+    expect(json.stdout).not.toContain("live-sentinel");
+  });
+
+  it("check on a clean file matches v0.4.0 output and exit code", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, "PORT=3000\nNODE_ENV=development\n");
+    const text = runCli(`check ${file} --no-color`, tmpDir);
+    expect(text.status).toBe(0);
+    expect(text.stderr).toBe("");
+    expect(text.stdout).toBe(
+      [
+        "envpeek check",
+        "",
+        `File: ${file}`,
+        "─".repeat(40),
+        "",
+        "✓ No validation issues found. Environment looks great!",
+        "",
+        "─".repeat(40),
+        "0 errors, 0 warnings",
+        "",
+      ].join("\n")
+    );
+
+    const json = runCli(`check ${file} --json`, tmpDir);
+    expect(json.status).toBe(0);
+    expect(json.stdout).toBe(
+      JSON.stringify({ file, valid: true, errors: [], warnings: [], totalIssues: 0 }, null, 2) + "\n"
+    );
+
+    const empty = join(tmpDir, "empty.env");
+    writeFileSync(empty, "");
+    const emptyRun = runCli(`check ${empty} --no-color`, tmpDir);
+    expect(emptyRun.status).toBe(0);
+    expect(emptyRun.stdout).toContain("No validation issues found");
+    expect(emptyRun.stdout).toContain("0 errors, 0 warnings");
+
+    const comments = join(tmpDir, "comments.env");
+    writeFileSync(comments, "# API_KEY=ignored-sentinel\n\n# PORT=1\n");
+    const commentsRun = runCli(`check ${comments} --no-color`, tmpDir);
+    expect(commentsRun.status).toBe(0);
+    expect(commentsRun.stdout).toContain("No validation issues found");
+    expect(commentsRun.stdout).not.toContain("ignored-sentinel");
+    expect(commentsRun.stdout).not.toContain("duplicate-key");
+  });
+
+  it("check --json reports the same duplicate and quoting key and line as text", () => {
+    const file = join(tmpDir, ".env");
+    writeFileSync(file, 'API_KEY=json-alpha-sentinel\nSECRET="json-unclosed-sentinel\nAPI_KEY=json-beta-sentinel\n');
+    const text = runCli(`check ${file} --no-color`, tmpDir);
+    const json = runCli(`check ${file} --json`, tmpDir);
+    expect(text.status).toBe(1);
+    expect(json.status).toBe(1);
+    expect(text.stdout).toContain("line 2:");
+    expect(text.stdout).toContain("SECRET");
+    expect(text.stdout).toContain("Unclosed quote");
+    expect(text.stdout).toContain("line 3:");
+    expect(text.stdout).toContain("API_KEY");
+    expect(text.stdout).toContain("lines 1, 3");
+
+    const obj = JSON.parse(json.stdout);
+    expect(obj.errors).toEqual([
+      {
+        key: "SECRET",
+        line: 2,
+        type: "error",
+        message: "Unclosed quote",
+        rule: "unclosed-quote",
+      },
+      {
+        key: "API_KEY",
+        line: 3,
+        type: "error",
+        message: "Duplicate key; the later value silently wins at runtime (lines 1, 3)",
+        rule: "duplicate-key",
+      },
+    ]);
+    expect(json.stdout).not.toContain("json-alpha-sentinel");
+    expect(json.stdout).not.toContain("json-beta-sentinel");
+    expect(json.stdout).not.toContain("json-unclosed-sentinel");
+    expect(text.stdout).not.toContain("json-alpha-sentinel");
+    expect(text.stdout).not.toContain("json-beta-sentinel");
+    expect(text.stdout).not.toContain("json-unclosed-sentinel");
   });
 });

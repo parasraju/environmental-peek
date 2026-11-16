@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-11-16
+
+### Added
+- Format validation in `check`: duplicate keys, and bad quoting (unclosed quotes, mismatched quotes, trailing characters after a closing quote)
+- SEO: 2 new keywords (`dotenv-validation`, `env-validation`) and a README validation section
+
 ## [0.4.0] - 2026-11-13
 
 ### Added

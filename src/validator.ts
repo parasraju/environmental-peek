@@ -125,12 +125,116 @@ export function validateEnv(entries: EnvEntry[], options: ValidateOptions = {}):
     }
   }
 
+  // Format checks run after the rules above so existing findings stay first and unchanged.
+  addFormatFindings(entries, errors);
+
   return {
     valid: errors.length === 0,
     errors,
     warnings,
     totalIssues: errors.length + warnings.length,
   };
+}
+
+function addFormatFindings(entries: EnvEntry[], errors: ValidationIssue[]): void {
+  const linesByKey = new Map<string, number[]>();
+  for (const entry of entries) {
+    const lines = linesByKey.get(entry.key);
+    if (lines) lines.push(entry.line);
+    else linesByKey.set(entry.key, [entry.line]);
+  }
+
+  const seen = new Map<string, number>();
+  for (const entry of entries) {
+    const count = seen.get(entry.key) ?? 0;
+    seen.set(entry.key, count + 1);
+    if (count >= 1) {
+      const lines = linesByKey.get(entry.key) ?? [];
+      errors.push({
+        key: entry.key,
+        line: entry.line,
+        type: "error",
+        message: `Duplicate key; the later value silently wins at runtime (lines ${lines.join(", ")})`,
+        rule: "duplicate-key",
+      });
+    }
+
+    const quoteProblem = classifyQuote(entry.rawValue);
+    if (quoteProblem === "unclosed") {
+      errors.push({
+        key: entry.key,
+        line: entry.line,
+        type: "error",
+        message: "Unclosed quote",
+        rule: "unclosed-quote",
+      });
+    } else if (quoteProblem === "mismatched") {
+      errors.push({
+        key: entry.key,
+        line: entry.line,
+        type: "error",
+        message: "Mismatched quotes",
+        rule: "mismatched-quotes",
+      });
+    } else if (quoteProblem === "trailing") {
+      errors.push({
+        key: entry.key,
+        line: entry.line,
+        type: "error",
+        message: "Trailing characters after the closing quote",
+        rule: "trailing-after-quote",
+      });
+    }
+  }
+}
+
+// Quoted values only. Comments and unquoted values are ignored.
+// A "#" inside quotes is not a comment; a same-line close ends the quote.
+function classifyQuote(rawValue: string): "unclosed" | "mismatched" | "trailing" | null {
+  const value = rawValue.trimStart();
+  if (!value.startsWith('"') && !value.startsWith("'")) return null;
+
+  const quote = value[0];
+  const other = quote === '"' ? "'" : '"';
+  const endIdx = findClosingQuote(value, quote);
+  if (endIdx !== -1) {
+    return trailingAfterQuoteIsOk(value.slice(endIdx + 1)) ? null : "trailing";
+  }
+
+  const withoutComment = stripUnquotedComment(value).trimEnd();
+  if (withoutComment.length > 1 && withoutComment.endsWith(other)) return "mismatched";
+  return "unclosed";
+}
+
+function findClosingQuote(value: string, quote: string): number {
+  let escaped = false;
+  for (let i = 1; i < value.length; i++) {
+    const ch = value[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (quote === '"' && ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === quote) return i;
+  }
+  return -1;
+}
+
+function trailingAfterQuoteIsOk(after: string): boolean {
+  const rest = after.trimStart();
+  return rest === "" || rest.startsWith("#");
+}
+
+function stripUnquotedComment(value: string): string {
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === "#" && (i === 0 || value[i - 1] === " " || value[i - 1] === "\t")) {
+      return value.slice(0, i);
+    }
+  }
+  return value;
 }
 
 function colorize(text: string, color: string, useColor: boolean): string {
