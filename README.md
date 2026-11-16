@@ -68,6 +68,36 @@ envpeek check .env --strict      # Fail if placeholder values remain in .env
 envpeek diff .env.example .env   # Check .env against .env.example for missing keys
 ```
 
+## Validate .env files — duplicate keys and bad quoting
+
+`envpeek check` is .env validation for two format mistakes: a key assigned more than once, and a quoted value that is unclosed, mismatched, or followed by trailing characters. Use it to validate .env file contents before starting an app. It is a dotenv linter for those cases. Each finding names the key and the line numbers only; the value is not printed.
+
+```
+API_KEY=first-fake
+PORT=3000
+API_KEY=second-fake
+SECRET="abcdef
+```
+
+```bash
+envpeek check .env --no-color
+```
+
+```
+envpeek check
+
+File: .env
+────────────────────────────────────────
+
+✗ line 3: API_KEY - Duplicate key; the later value silently wins at runtime (lines 1, 3) [duplicate-key]
+✗ line 4: SECRET - Unclosed quote [unclosed-quote]
+
+────────────────────────────────────────
+2 errors, 0 warnings
+```
+
+That command exits 1. A commented-out line (`# API_KEY=...`) is not a second key, and a `#` inside a quoted value does not start a comment.
+
 ## Mask secrets
 
 `envpeek` lets you mask secrets in terminal output so you can inspect configuration during debugging or screen-sharing without leaking secrets:

@@ -10,7 +10,7 @@ import { filterEntries } from "./filter.js";
 import type { CliOptions } from "./types.js";
 
 // Bug fix (v0.2.2): keep in sync with package.json (envpeek --version).
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 
 function printHelp(): void {
   const help = `
@@ -25,7 +25,7 @@ Usage:
 Commands:
   diff <base> [target]    Compare two env files (default target: .env)
   example [file]          Generate a clean .env.example with placeholders (alias: gen-example)
-  check [file]            Validate types, URLs, ports, and placeholder leaks (alias: lint)
+  check [file]            Validate types, URLs, ports, placeholder leaks, duplicate keys, and bad quoting (alias: lint)
 
 Arguments:
   file                    Path to env file (default: .env)
