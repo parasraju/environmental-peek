@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2026-11-21
+
+### Added
+- README: 'Stop catting your .env file' safe-inspection walkthrough — check .env masked instead of printing secrets.
+- SEO: 1 new keyword (`mask-secrets`)
+
 ## [0.5.0] - 2026-11-16
 
 ### Added

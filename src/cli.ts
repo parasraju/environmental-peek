@@ -10,7 +10,7 @@ import { filterEntries } from "./filter.js";
 import type { CliOptions } from "./types.js";
 
 // Bug fix (v0.2.2): keep in sync with package.json (envpeek --version).
-const VERSION = "0.5.0";
+const VERSION = "0.5.1";
 
 function printHelp(): void {
   const help = `

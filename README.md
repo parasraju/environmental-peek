@@ -124,6 +124,14 @@ Environment: .env
 - **What is shown**: a hidden value shows only its first 2–3 characters followed by bullets (`sk_••••••••••••••••`). Values of 4 characters or fewer are fully masked (`••••`), and multiline values are fully redacted (`********`). Non-secret values such as `PORT=3000` are shown as-is.
 - **Local only**: the source makes no network calls, spawns no processes, writes no files unless `-o` / `--output` is passed with `example`, and has no runtime dependencies.
 
+### Stop catting your .env file — check it masked instead
+
+Stop catting your .env file. `cat .env` prints every value. Check .env without showing secrets.
+
+1. `envpeek` shows which keys are set and which are empty, with values masked. Look at the key names.
+2. `envpeek check` reports duplicate keys and bad quoting. Look at the key name and the line number.
+3. `envpeek diff` compares `.env` with `.env.example`. Look for the missing key you forgot to set.
+
 ## Diff .env files
 
 Compare two environment files to diff .env files (base first, target second; defaults to `.env.example` vs `.env`) while keeping secret values masked:
@@ -211,3 +219,7 @@ Lines like `export KEY=value` are read as `KEY`. Malformed lines, duplicate keys
 ## License
 
 MIT
+
+## 0.5.1
+
+README: 'Stop catting your .env file' safe-inspection walkthrough — check .env masked instead of printing secrets.
