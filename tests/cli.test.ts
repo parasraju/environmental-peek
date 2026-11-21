@@ -53,7 +53,7 @@ describe("CLI", () => {
   it("shows version", () => {
     const r = runCli("--version");
     expect(r.status).toBe(0);
-    expect(r.stdout.trim()).toBe("0.5.0");
+    expect(r.stdout.trim()).toBe("0.5.1");
   });
 
   it("errors on missing file", () => {
